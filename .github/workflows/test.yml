@@ -1,0 +1,54 @@
+name: Selenide UI Tests
+
+on: push
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Run tests
+        env:
+          SELENIDE_HEADLESS: true
+        run: mvn verify
+
+      - name: Upload Allure results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-results
+          path: target/allure-results/
+
+      - name: Upload screenshots
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: screenshots
+          path: target/screenshots/
+
+      - name: Upload Allure report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: allure-report
+          path: target/site/allure-maven-plugin/
+
+      - name: Notify on failure via Slack
+        if: failure()
+        continue-on-error: true
+        uses: slackapi/slack-github-action@v1.27.0
+        with:
+          payload: '{"text": "Tests failed on ${{ github.ref }} - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
