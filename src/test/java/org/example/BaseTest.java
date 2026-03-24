@@ -5,12 +5,15 @@ import io.qameta.allure.junit5.AllureJunit5;
 import io.qameta.allure.selenide.AllureSelenide;
 import org.example.config.BrowserConfig;
 import org.example.model.TestUser;
+import org.example.pages.CartPage;
+import org.example.pages.CheckoutPage;
 import org.example.pages.LoginPage;
+import org.example.pages.ProductDetailPage;
+import org.example.pages.ProductsPage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 
-import static com.codeborne.selenide.Selenide.closeWebDriver;
 import static com.codeborne.selenide.Selenide.open;
 
 /**
@@ -18,16 +21,20 @@ import static com.codeborne.selenide.Selenide.open;
  *
  * <p>Responsibilities (SRP — each concern is delegated):
  * <ul>
- *   <li>Browser lifecycle: open and close the WebDriver around each test.</li>
+ *   <li>Browser lifecycle: open the browser before each test. WebDriver teardown is
+ *       handled by {@link ScreenshotWatcher} so the driver is still alive when a
+ *       failure screenshot is captured.</li>
  *   <li>Allure integration: register/deregister the {@link AllureSelenide} listener
  *       so screenshots and page sources are attached to reports on failure.</li>
+ *   <li>Page object fields: pre-instantiated page objects available to all subclasses
+ *       so test files contain only test logic (DRY).</li>
  *   <li>Shared helpers: provide {@link #loginAs(TestUser)} so subclasses never
  *       duplicate login logic (DRY).</li>
  * </ul>
  * </p>
  *
  * <p>Browser configuration is delegated to {@link BrowserConfig} (SRP).
- * Screenshot-on-failure is delegated to {@link ScreenshotWatcher} (SRP).</p>
+ * Screenshot-on-failure and WebDriver close are delegated to {@link ScreenshotWatcher} (SRP).</p>
  *
  * <p>All test classes must extend this class to inherit the setup/teardown lifecycle.</p>
  */
@@ -37,6 +44,25 @@ public class BaseTest {
     /** Allure listener key used to register and remove the listener by name. */
     private static final String ALLURE_LISTENER_KEY = "allure";
 
+    // -------------------------------------------------------------------------
+    // Pre-instantiated page objects — available to all subclasses (DRY)
+    // -------------------------------------------------------------------------
+
+    /** Page object for the login screen ({@code /}). */
+    protected LoginPage loginPage;
+
+    /** Page object for the product listing page ({@code /inventory.html}). */
+    protected ProductsPage productsPage;
+
+    /** Page object for a product detail page ({@code /inventory-item.html}). */
+    protected ProductDetailPage productDetailPage;
+
+    /** Page object for the shopping cart page ({@code /cart.html}). */
+    protected CartPage cartPage;
+
+    /** Page object for the multi-step checkout flow. */
+    protected CheckoutPage checkoutPage;
+
     /**
      * Runs before each test method.
      *
@@ -44,10 +70,9 @@ public class BaseTest {
      *   <li>Applies Chrome args conditionally via {@link BrowserConfig#applyBrowserOptions()},
      *       respecting the {@code selenide.headless} property from {@code selenide.properties}.</li>
      *   <li>Registers the {@link AllureSelenide} listener to capture screenshots and
-     *       page sources on failure. {@code enableLogs()} attaches Selenide action logs
-     *       to the Allure report; {@code screenshots(true)} attaches a screenshot on
-     *       any test failure.</li>
+     *       page sources on failure.</li>
      *   <li>Opens the base URL ({@code /}) as defined in {@code selenide.properties}.</li>
+     *   <li>Instantiates all page objects so subclasses can use them directly.</li>
      * </ol>
      */
     @BeforeEach
@@ -58,32 +83,36 @@ public class BaseTest {
                         .screenshots(true)
                         .savePageSource(false));
         open("/");
+
+        loginPage       = new LoginPage();
+        productsPage    = new ProductsPage();
+        productDetailPage = new ProductDetailPage();
+        cartPage        = new CartPage();
+        checkoutPage    = new CheckoutPage();
     }
 
     /**
      * Runs after each test method.
      *
-     * <p>Closes the WebDriver instance and removes the Allure listener to prevent
-     * listener accumulation across tests.</p>
+     * <p>Removes the Allure listener to prevent accumulation across tests.
+     * WebDriver is closed by {@link ScreenshotWatcher} (after any failure screenshot
+     * is taken) — do NOT call {@code closeWebDriver()} here.</p>
      */
     @AfterEach
     void tearDown() {
-        closeWebDriver();
         SelenideLogger.removeListener(ALLURE_LISTENER_KEY);
     }
 
     /**
      * Shared login helper — eliminates duplicated login setup across all test subclasses (DRY).
      *
-     * <p>Navigates to the login page (already open from {@link #setUp()}) and submits
-     * the credentials associated with the given {@link TestUser}.</p>
+     * <p>Uses the pre-instantiated {@link #loginPage} field to submit credentials.</p>
      *
      * @param user the {@link TestUser} enum constant whose credentials to use
      */
     protected void loginAs(TestUser user) {
-        new LoginPage()
-                .enterUsername(user.username)
-                .enterPassword(user.password)
-                .submit();
+        loginPage.enterUsername(user.username)
+                 .enterPassword(user.password)
+                 .submit();
     }
 }

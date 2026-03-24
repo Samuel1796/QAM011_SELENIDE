@@ -12,11 +12,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+
+import static com.codeborne.selenide.Selenide.closeWebDriver;
 
 /**
  * JUnit 5 {@link TestWatcher} extension that captures a browser screenshot on
@@ -25,15 +26,17 @@ import java.nio.file.Paths;
  * <p>Registered via {@code @ExtendWith} in {@link BaseTest} so every test subclass
  * automatically benefits without per-class configuration (DRY / OCP).</p>
  *
+ * <p>This watcher also owns the WebDriver lifecycle. {@code BaseTest.tearDown()} must
+ * NOT call {@code closeWebDriver()} — if it did, the driver would already be closed
+ * by the time {@link #testFailed} fires (JUnit 5 runs {@code @AfterEach} before
+ * {@link TestWatcher} callbacks). Instead, every callback here closes the driver
+ * after it is no longer needed.</p>
+ *
  * <p>Why not rely solely on {@code AllureSelenide.screenshots(true)}?
  * {@code AllureSelenide} only intercepts failures that originate from Selenide's own
- * {@code shouldBe} / {@code shouldHave} assertions. AssertJ failures ({@code assertThat})
+ * {@code shouldBe}/{@code shouldHave} assertions. AssertJ failures ({@code assertThat})
  * bypass Selenide entirely, so no screenshot would be attached for those cases.
  * This watcher fires on <em>every</em> test failure regardless of assertion library.</p>
- *
- * <p>The screenshot is attached directly to the Allure report via
- * {@link Allure#addAttachment(String, String, String, ByteArrayInputStream)} so it
- * appears inline in the report without needing a separate file lookup.</p>
  */
 public class ScreenshotWatcher implements TestWatcher {
 
@@ -47,13 +50,12 @@ public class ScreenshotWatcher implements TestWatcher {
      *
      * <p>Steps:
      * <ol>
-     *   <li>Check that a WebDriver session is still active (it may have crashed).</li>
+     *   <li>Check that a WebDriver session is still active.</li>
      *   <li>Capture the viewport as a PNG byte array via the WebDriver API directly —
      *       this works for both Selenide and AssertJ failures.</li>
-     *   <li>Attach the PNG to the current Allure test result so it appears inline
-     *       in the report under the "Attachments" section.</li>
-     *   <li>Also write the PNG to {@code target/screenshots/} for CI artifact upload,
-     *       using the naming pattern {@code ClassName_methodName_timestamp.png}.</li>
+     *   <li>Attach the PNG to the current Allure test result inline.</li>
+     *   <li>Also write the PNG to {@code target/screenshots/} for CI artifact upload.</li>
+     *   <li>Close the WebDriver (driver must still be open at this point).</li>
      * </ol>
      * </p>
      *
@@ -73,13 +75,13 @@ public class ScreenshotWatcher implements TestWatcher {
             byte[] screenshotBytes = ((TakesScreenshot) driver)
                     .getScreenshotAs(OutputType.BYTES);
 
-            // 1. Attach inline to Allure report
-            // Allure 2.x signature: addAttachment(name, type, content, fileExtension)
+            // Attach inline to Allure report
             String attachmentName = "Screenshot on failure — " + context.getDisplayName();
-            Allure.addAttachment(attachmentName, "image/png",
-                    new ByteArrayInputStream(screenshotBytes), "png");
+            try (ByteArrayInputStream stream = new ByteArrayInputStream(screenshotBytes)) {
+                Allure.addAttachment(attachmentName, "image/png", stream, ".png");
+            }
 
-            // 2. Also persist to target/screenshots/ for CI artifact upload
+            // Also persist to target/screenshots/ for CI artifact upload
             String filename = ScreenshotNamer.buildName(
                     context.getRequiredTestClass().getSimpleName(),
                     context.getRequiredTestMethod().getName()
@@ -95,6 +97,43 @@ public class ScreenshotWatcher implements TestWatcher {
             log.error("Failed to save screenshot to disk: {}", e.getMessage(), e);
         } catch (ClassCastException e) {
             log.warn("WebDriver does not support screenshots: {}", e.getMessage());
+        } finally {
+            closeWebDriver();
         }
+    }
+
+    /**
+     * Invoked by JUnit 5 after a test completes successfully.
+     * Closes the WebDriver session.
+     *
+     * @param context the JUnit 5 extension context
+     */
+    @Override
+    public void testSuccessful(ExtensionContext context) {
+        closeWebDriver();
+    }
+
+    /**
+     * Invoked by JUnit 5 after a test is aborted (e.g. via {@code Assumptions.assumeTrue}).
+     * Closes the WebDriver session.
+     *
+     * @param context the JUnit 5 extension context
+     * @param cause   the assumption failure that caused the abort
+     */
+    @Override
+    public void testAborted(ExtensionContext context, Throwable cause) {
+        closeWebDriver();
+    }
+
+    /**
+     * Invoked by JUnit 5 when a test is disabled (skipped).
+     * No WebDriver was started, so nothing to close.
+     *
+     * @param context the JUnit 5 extension context
+     * @param reason  the optional reason the test was disabled
+     */
+    @Override
+    public void testDisabled(ExtensionContext context, java.util.Optional<String> reason) {
+        // No driver started for disabled tests — nothing to do
     }
 }

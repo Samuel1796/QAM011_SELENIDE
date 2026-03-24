@@ -6,8 +6,6 @@ import io.qameta.allure.SeverityLevel;
 import io.qameta.allure.Story;
 import org.example.BaseTest;
 import org.example.model.TestUser;
-import org.example.pages.ProductDetailPage;
-import org.example.pages.ProductsPage;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
@@ -21,15 +19,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * All tests are tagged {@code @Tag("smoke")} and can be run via
  * {@code mvn verify -Dgroups=smoke}.</p>
  *
- * <p>Login is performed once per test via the shared {@link BaseTest#loginAs(TestUser)}
- * helper — no duplicated login code (DRY).</p>
+ * <p>All page interactions use the {@code productsPage} and {@code productDetailPage}
+ * fields inherited from {@link BaseTest} — no inline page object instantiation (DRY).</p>
  */
 @Tag("smoke")
 public class ProductsTest extends BaseTest {
 
     /**
      * Logs in as the standard user before each test so the products page is accessible.
-     * Delegates to {@link BaseTest#loginAs(TestUser)} (DRY).
      */
     @BeforeEach
     void loginAsStandardUser() {
@@ -44,7 +41,7 @@ public class ProductsTest extends BaseTest {
     @Severity(SeverityLevel.CRITICAL)
     @Description("Products page displays at least six products")
     void productsPageDisplaysAtLeastSixProducts() {
-        assertThat(new ProductsPage().getProductNames()).hasSizeGreaterThanOrEqualTo(6);
+        assertThat(productsPage.getProductNames()).hasSizeGreaterThanOrEqualTo(6);
     }
 
     /**
@@ -56,11 +53,10 @@ public class ProductsTest extends BaseTest {
     @Severity(SeverityLevel.CRITICAL)
     @Description("Selecting a product navigates to the detail page with a matching name")
     void selectingProductNavigatesToDetailPageWithMatchingName() {
-        ProductsPage productsPage = new ProductsPage();
         String selectedName = productsPage.getProductNames().get(0);
         productsPage.selectProduct(selectedName);
 
-        assertThat(new ProductDetailPage().getProductName()).isEqualTo(selectedName);
+        assertThat(productDetailPage.getProductName()).isEqualTo(selectedName);
     }
 
     /**
@@ -71,10 +67,9 @@ public class ProductsTest extends BaseTest {
     @Severity(SeverityLevel.NORMAL)
     @Description("Product detail page shows price in correct format")
     void productDetailPageShowsPriceInCorrectFormat() {
-        ProductsPage productsPage = new ProductsPage();
         productsPage.selectProduct(productsPage.getProductNames().get(0));
 
-        assertThat(new ProductDetailPage().getPrice()).matches("\\$\\d+\\.\\d{2}");
+        assertThat(productDetailPage.getPrice()).matches("\\$\\d+\\.\\d{2}");
     }
 
     /**
@@ -86,13 +81,10 @@ public class ProductsTest extends BaseTest {
     @Severity(SeverityLevel.NORMAL)
     @Description("Adding a product to cart from detail page shows badge count of one")
     void addToCartFromDetailPageShowsBadgeCountOne() {
-        ProductsPage productsPage = new ProductsPage();
         productsPage.selectProduct(productsPage.getProductNames().get(0));
+        productDetailPage.addToCart();
+        productDetailPage.backToProducts();
 
-        ProductDetailPage detailPage = new ProductDetailPage();
-        detailPage.addToCart();
-        detailPage.backToProducts();
-
-        assertThat(new ProductsPage().getCartBadgeCount()).isEqualTo(1);
+        assertThat(productsPage.getCartBadgeCount()).isEqualTo(1);
     }
 }

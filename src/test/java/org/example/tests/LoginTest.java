@@ -7,7 +7,6 @@ import io.qameta.allure.SeverityLevel;
 import io.qameta.allure.Story;
 import org.example.BaseTest;
 import org.example.model.TestUser;
-import org.example.pages.LoginPage;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
@@ -21,17 +20,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * All tests are tagged {@code @Tag("smoke")} so they can be run independently via
  * {@code mvn verify -Dgroups=smoke}.</p>
  *
- * <p>Each test creates a fresh {@link LoginPage} instance. The browser is already
- * on the login page after {@code BaseTest.setUp()} calls {@code open("/")}.</p>
+ * <p>All page interactions go through the {@code loginPage} field inherited from
+ * {@link BaseTest} — no {@code new LoginPage()} calls in test methods (DRY).</p>
  */
 @Tag("smoke")
 public class LoginTest extends BaseTest {
 
     /**
      * Verifies that submitting valid credentials navigates to the products inventory page.
-     *
-     * <p>Uses Selenide's {@code shouldBe(Condition.visible)} to assert the inventory
-     * list is rendered — this implicitly validates the URL change as well.</p>
      */
     @Test
     @Story("Login")
@@ -50,7 +46,6 @@ public class LoginTest extends BaseTest {
     @Severity(SeverityLevel.NORMAL)
     @Description("Invalid credentials show an error message")
     void invalidCredentialsShowError() {
-        LoginPage loginPage = new LoginPage();
         loginPage.enterUsername(TestUser.INVALID.username)
                  .enterPassword(TestUser.INVALID.password)
                  .submit();
@@ -67,7 +62,6 @@ public class LoginTest extends BaseTest {
     @Severity(SeverityLevel.NORMAL)
     @Description("Submitting with empty username shows a validation error")
     void emptyUsernameShowsError() {
-        LoginPage loginPage = new LoginPage();
         loginPage.enterUsername("")
                  .enterPassword("secret_sauce")
                  .submit();
@@ -84,7 +78,6 @@ public class LoginTest extends BaseTest {
     @Severity(SeverityLevel.NORMAL)
     @Description("Submitting with empty password shows a validation error")
     void emptyPasswordShowsError() {
-        LoginPage loginPage = new LoginPage();
         loginPage.enterUsername("standard_user")
                  .enterPassword("")
                  .submit();
@@ -102,7 +95,6 @@ public class LoginTest extends BaseTest {
     @Severity(SeverityLevel.NORMAL)
     @Description("Locked out user sees an appropriate error message")
     void lockedOutUserShowsError() {
-        LoginPage loginPage = new LoginPage();
         loginPage.enterUsername(TestUser.LOCKED_OUT.username)
                  .enterPassword(TestUser.LOCKED_OUT.password)
                  .submit();
