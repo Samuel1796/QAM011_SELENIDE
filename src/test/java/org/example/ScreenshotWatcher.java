@@ -1,67 +1,100 @@
 package org.example;
 
-import com.codeborne.selenide.Selenide;
+import com.codeborne.selenide.WebDriverRunner;
+import io.qameta.allure.Allure;
 import org.example.util.ScreenshotNamer;
 import org.junit.jupiter.api.extension.ExtensionContext;
 import org.junit.jupiter.api.extension.TestWatcher;
+import org.openqa.selenium.OutputType;
+import org.openqa.selenium.TakesScreenshot;
+import org.openqa.selenium.WebDriver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 
 /**
- * JUnit 5 {@link TestWatcher} extension that captures a browser screenshot
- * whenever a test fails (Requirement 9.1, 9.2, 9.3).
+ * JUnit 5 {@link TestWatcher} extension that captures a browser screenshot on
+ * test failure and attaches it to the Allure report (Requirements 9.1, 9.2, 9.3).
  *
  * <p>Registered via {@code @ExtendWith} in {@link BaseTest} so every test subclass
- * automatically benefits without any per-class configuration (DRY / OCP).</p>
+ * automatically benefits without per-class configuration (DRY / OCP).</p>
  *
- * <p>Screenshot naming is delegated to {@link ScreenshotNamer} (SRP — this class
- * only handles the capture and persistence concern).</p>
+ * <p>Why not rely solely on {@code AllureSelenide.screenshots(true)}?
+ * {@code AllureSelenide} only intercepts failures that originate from Selenide's own
+ * {@code shouldBe} / {@code shouldHave} assertions. AssertJ failures ({@code assertThat})
+ * bypass Selenide entirely, so no screenshot would be attached for those cases.
+ * This watcher fires on <em>every</em> test failure regardless of assertion library.</p>
  *
- * <p>The {@code AllureSelenide} listener registered in {@link BaseTest} also attaches
- * screenshots to the Allure report. This watcher additionally persists them to
- * {@code target/screenshots/} for direct file access.</p>
+ * <p>The screenshot is attached directly to the Allure report via
+ * {@link Allure#addAttachment(String, String, String, ByteArrayInputStream)} so it
+ * appears inline in the report without needing a separate file lookup.</p>
  */
 public class ScreenshotWatcher implements TestWatcher {
 
     private static final Logger log = LoggerFactory.getLogger(ScreenshotWatcher.class);
 
-    /** Directory where screenshots are saved, relative to the Maven project root. */
+    /** Directory where screenshots are also persisted as files for CI artifact upload. */
     private static final String SCREENSHOTS_DIR = "target/screenshots";
 
     /**
-     * Invoked by JUnit 5 after a test method throws an exception.
+     * Invoked by JUnit 5 immediately after a test method throws an exception.
      *
-     * <p>Steps performed:
+     * <p>Steps:
      * <ol>
-     *   <li>Build a unique filename via {@link ScreenshotNamer#buildName(String, String)}.</li>
-     *   <li>Ensure {@code target/screenshots/} exists, creating it if necessary.</li>
-     *   <li>Delegate to {@link Selenide#screenshot(String)} which captures the current
-     *       browser viewport and saves it as a PNG. Selenide appends {@code .png}
-     *       automatically, so the extension is stripped from the path argument.</li>
-     *   <li>Log the saved path for CI artifact traceability.</li>
+     *   <li>Check that a WebDriver session is still active (it may have crashed).</li>
+     *   <li>Capture the viewport as a PNG byte array via the WebDriver API directly —
+     *       this works for both Selenide and AssertJ failures.</li>
+     *   <li>Attach the PNG to the current Allure test result so it appears inline
+     *       in the report under the "Attachments" section.</li>
+     *   <li>Also write the PNG to {@code target/screenshots/} for CI artifact upload,
+     *       using the naming pattern {@code ClassName_methodName_timestamp.png}.</li>
      * </ol>
      * </p>
      *
-     * @param context the JUnit 5 extension context providing test class and method metadata
+     * @param context the JUnit 5 extension context providing test class/method metadata
      * @param cause   the throwable that caused the test to fail
      */
     @Override
     public void testFailed(ExtensionContext context, Throwable cause) {
-        String filename = ScreenshotNamer.buildName(
-                context.getRequiredTestClass().getSimpleName(),
-                context.getRequiredTestMethod().getName()
-        );
-        // Selenide appends ".png" automatically — pass the path without the extension
-        String filenameWithoutExtension = filename.replace(".png", "");
-
-        File screenshotsDir = new File(SCREENSHOTS_DIR);
-        if (!screenshotsDir.exists()) {
-            screenshotsDir.mkdirs();
+        if (!WebDriverRunner.hasWebDriverStarted()) {
+            log.warn("WebDriver not active — skipping screenshot for {}",
+                    context.getDisplayName());
+            return;
         }
 
-        String screenshotPath = Selenide.screenshot(SCREENSHOTS_DIR + "/" + filenameWithoutExtension);
-        log.info("Screenshot saved: {}", screenshotPath);
+        try {
+            WebDriver driver = WebDriverRunner.getWebDriver();
+            byte[] screenshotBytes = ((TakesScreenshot) driver)
+                    .getScreenshotAs(OutputType.BYTES);
+
+            // 1. Attach inline to Allure report
+            // Allure 2.x signature: addAttachment(name, type, content, fileExtension)
+            String attachmentName = "Screenshot on failure — " + context.getDisplayName();
+            Allure.addAttachment(attachmentName, "image/png",
+                    new ByteArrayInputStream(screenshotBytes), "png");
+
+            // 2. Also persist to target/screenshots/ for CI artifact upload
+            String filename = ScreenshotNamer.buildName(
+                    context.getRequiredTestClass().getSimpleName(),
+                    context.getRequiredTestMethod().getName()
+            );
+            Path dir = Paths.get(SCREENSHOTS_DIR);
+            Files.createDirectories(dir);
+            Path filePath = dir.resolve(filename);
+            Files.write(filePath, screenshotBytes);
+
+            log.info("Screenshot attached to Allure and saved to: {}", filePath);
+
+        } catch (IOException e) {
+            log.error("Failed to save screenshot to disk: {}", e.getMessage(), e);
+        } catch (ClassCastException e) {
+            log.warn("WebDriver does not support screenshots: {}", e.getMessage());
+        }
     }
 }
