@@ -2,7 +2,6 @@ name: Selenide UI Tests
 
 on:
   push:
-  # Allow manual trigger from the Actions tab
   workflow_dispatch:
 
 # Required for GitHub Pages deployment
@@ -30,24 +29,46 @@ jobs:
         env:
           SELENIDE_HEADLESS: true
         run: mvn verify
+        # Continue so the report is always generated, even on test failures
+        continue-on-error: true
 
-      # ── Allure report generation ──────────────────────────────────────────
-      # Generate the HTML report from the raw allure-results produced by mvn verify.
-      # We use the allure-commandline action so the report is self-contained and
-      # ready to be served as a static site on GitHub Pages.
+      # ── Pull previous Allure history from gh-pages ────────────────────────
+      # Copies the history/ directory from the previously deployed report so
+      # trend graphs work across runs. Silently skipped on the very first run
+      # when the gh-pages branch does not yet exist.
+      - name: Get Allure history from gh-pages
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Copy previous Allure history
+        if: always()
+        continue-on-error: true
+        run: |
+          if [ -d "gh-pages/history" ]; then
+            cp -r gh-pages/history target/allure-results/history
+            echo "History copied from previous run."
+          else
+            echo "No previous history found — first run."
+          fi
+
+      # ── Generate Allure HTML report ───────────────────────────────────────
       - name: Generate Allure HTML report
         uses: simple-elf/allure-report-action@v1.9
         if: always()
         with:
           allure_results: target/allure-results
           allure_report: allure-report
-          # Keep the last 20 runs of history so trend graphs work
           keep_reports: 20
 
-      # ── GitHub Pages deployment ───────────────────────────────────────────
-      # Publish the generated report to the gh-pages branch.
-      # After the first successful run, the report is available at:
-      #   https://<org>.github.io/<repo>/
+      # ── Deploy to GitHub Pages ────────────────────────────────────────────
+      # Publishes the generated report to the gh-pages branch root so it is
+      # served at https://<user>.github.io/<repo>/
+      # force_orphan: true ensures a clean branch is created on first run and
+      # avoids stale files accumulating across deploys.
       - name: Deploy Allure report to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         if: always()
@@ -55,11 +76,9 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-report
-          # Overwrite the previous report on every push so the page always
-          # shows the latest run (history is preserved inside the report itself)
-          force_orphan: false
+          force_orphan: true
 
-      # ── Artifact uploads (kept for direct download from the Actions tab) ──
+      # ── Artifact uploads ──────────────────────────────────────────────────
       - name: Upload Allure results
         uses: actions/upload-artifact@v4
         if: always()
@@ -73,6 +92,7 @@ jobs:
         with:
           name: screenshots
           path: target/screenshots/
+          if-no-files-found: ignore
 
       - name: Upload Allure report
         uses: actions/upload-artifact@v4
