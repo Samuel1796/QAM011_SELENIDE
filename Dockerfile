@@ -20,9 +20,6 @@ WORKDIR /app
 COPY . .
 RUN mvn dependency:resolve -q
 
-# Run tests in headless mode, then generate the Allure HTML report.
-# Results are written to /app/target/allure-results (mounted as a volume
-# in docker-compose so the allure-serve container can read them).
-ENV SELENIDE_HEADLESS=true
-
-CMD mvn verify; allure generate target/allure-results --clean -o /allure-report
+# Pass headless flag as a Maven system property so Selenide reads it via its
+# own properties mechanism — consistent with how selenide.properties works locally.
+CMD mvn verify -Dselenide.headless=true; allure generate target/allure-results --clean -o /allure-report

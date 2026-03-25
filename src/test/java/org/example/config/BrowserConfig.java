@@ -25,8 +25,9 @@ import static com.codeborne.selenide.Selenide.$;
  * </ul>
  * </p>
  *
- * <p>The {@code SELENIDE_HEADLESS} environment variable (set in Docker / GitHub Actions)
- * overrides the properties file value at runtime (OCP — open for extension via env vars).</p>
+ * <p>To override headless mode at runtime (CI / Docker) without editing the properties file,
+ * pass {@code -Dselenide.headless=true} as a Maven system property. Selenide picks this up
+ * automatically and sets {@link Configuration#headless} before any test runs.</p>
  */
 public final class BrowserConfig {
 
@@ -42,23 +43,23 @@ public final class BrowserConfig {
     /**
      * Applies Chrome-specific JVM arguments when headless mode is active.
      *
-     * <p>Selenide already sets {@link Configuration#headless} from {@code selenide.properties}
-     * or the {@code SELENIDE_HEADLESS} environment variable before this method is called.
-     * This method reads that value and conditionally adds the required Chrome flags:
+     * <p>Selenide reads {@code selenide.properties} automatically at startup and sets
+     * {@link Configuration#headless} before this method is called. This method simply
+     * reads that value and conditionally adds the required Chrome flags:
      * <ul>
      *   <li>{@code --headless=new} — modern headless mode (Chrome 112+)</li>
      *   <li>{@code --no-sandbox} — required in Docker/CI environments</li>
      *   <li>{@code --disable-dev-shm-usage} — prevents shared memory crashes in containers</li>
      * </ul>
-     * When {@code selenide.headless=false} (local development), no extra args are applied
-     * and Chrome opens normally with a visible window.</p>
+     * To run headless in CI or Docker without editing the properties file, pass
+     * {@code -Dselenide.headless=true} as a Maven system property — Selenide picks it up
+     * automatically. When {@code selenide.headless=false} (local development), Chrome opens
+     * with a visible window and no extra args are applied.</p>
      */
     public static void applyBrowserOptions() {
-        // Respect the headless flag already loaded from selenide.properties or env var
-        boolean headless = Configuration.headless
-                || Boolean.parseBoolean(System.getenv("SELENIDE_HEADLESS"));
-
-        if (headless) {
+        // Configuration.headless is already set by Selenide from selenide.properties
+        // or the -Dselenide.headless system property — no env var needed.
+        if (Configuration.headless) {
             ChromeOptions options = new ChromeOptions();
             options.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage");
             Configuration.browserCapabilities = options;

@@ -25,9 +25,9 @@ jobs:
           cache: 'maven'
 
       - name: Run tests
-        env:
-          SELENIDE_HEADLESS: true
-        run: mvn verify
+        # Pass headless flag as a Maven system property so Selenide picks it up
+        # directly from the properties mechanism — no env var needed.
+        run: mvn verify -Dselenide.headless=true
         continue-on-error: true
 
       # ── Install Allure CLI ────────────────────────────────────────────────

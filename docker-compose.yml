@@ -8,8 +8,6 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: selenide-tests
-    environment:
-      SELENIDE_HEADLESS: "true"
     volumes:
       # Persist raw results and the generated report outside the container
       - allure-results:/app/target/allure-results
