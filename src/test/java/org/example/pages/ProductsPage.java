@@ -4,6 +4,7 @@ import com.codeborne.selenide.Condition;
 import org.example.config.BrowserConfig;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.codeborne.selenide.Selenide.$;
 import static com.codeborne.selenide.Selenide.$$;
@@ -24,6 +25,24 @@ public class ProductsPage {
     /** CSS selector for add-to-cart buttons (data-test attribute starts with "add-to-cart"). */
     private static final String ADD_TO_CART_BUTTONS = "[data-test^='add-to-cart']";
 
+    /** CSS selector for remove-from-cart buttons (data-test attribute starts with "remove"). */
+    private static final String REMOVE_FROM_CART_BUTTONS = "[data-test^='remove']";
+
+    /** Data-test selector for the product sorting dropdown. */
+    private static final String SORT_DROPDOWN = "[data-test='product-sort-container']";
+
+    /** CSS selector for product prices in the inventory list. */
+    private static final String PRODUCT_PRICE = ".inventory_item_price";
+
+    /** CSS selector for each product row on the inventory page. */
+    private static final String PRODUCT_ROW = ".inventory_item";
+
+    /** Data-test selector for the burger menu button in the header. */
+    private static final String BURGER_MENU_BUTTON = "#react-burger-menu-btn";
+
+    /** Data-test selector for the logout action in the side menu. */
+    private static final String LOGOUT_LINK = "[data-test='logout-sidebar-link']";
+
     /**
      * Returns the display names of all products currently visible on the page.
      *
@@ -34,6 +53,29 @@ public class ProductsPage {
      */
     public List<String> getProductNames() {
         return $$(PRODUCT_NAME).texts();
+    }
+
+    /**
+     * Selects a sort option from the product sort dropdown.
+     *
+     * <p>Supported values on SauceDemo are {@code az}, {@code za}, {@code lohi}, and {@code hilo}.</p>
+     *
+     * @param sortValue the option value attribute to select
+     */
+    public void sortBy(String sortValue) {
+        $(SORT_DROPDOWN).selectOptionByValue(sortValue);
+    }
+
+    /**
+     * Returns all product prices as numeric values.
+     *
+     * @return ordered list of product prices as doubles
+     */
+    public List<Double> getProductPrices() {
+        return $$(PRODUCT_PRICE).texts().stream()
+                .map(text -> text.replace("$", "").trim())
+                .map(Double::parseDouble)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -92,5 +134,63 @@ public class ProductsPage {
      */
     public void addItemToCartByIndex(int index) {
         $$(ADD_TO_CART_BUTTONS).get(index).click();
+    }
+
+    /**
+     * Adds a product to the cart using its exact display name.
+     *
+     * @param name exact product name to add
+     */
+    public void addItemToCartByName(String name) {
+        $$(PRODUCT_ROW)
+                .findBy(Condition.text(name))
+                .$(ADD_TO_CART_BUTTONS)
+                .click();
+    }
+
+    /**
+     * Clicks the remove button at the given zero-based index.
+     *
+     * @param index zero-based index of the remove button to click
+     */
+    public void removeItemFromCartByIndex(int index) {
+        $$(REMOVE_FROM_CART_BUTTONS).get(index).click();
+    }
+
+    /**
+     * Removes a product from the cart using its exact display name.
+     *
+     * @param name exact product name to remove
+     */
+    public void removeItemFromCartByName(String name) {
+        $$(PRODUCT_ROW)
+                .findBy(Condition.text(name))
+                .$(REMOVE_FROM_CART_BUTTONS)
+                .click();
+    }
+
+    /**
+     * Opens the side navigation menu from the products page.
+     */
+    public void openBurgerMenu() {
+        $(BURGER_MENU_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
+
+        // SauceDemo side menu can occasionally miss the first click in CI/headless runs.
+        if (!$(LOGOUT_LINK).is(Condition.visible)) {
+            $(BURGER_MENU_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
+        }
+
+        $(LOGOUT_LINK).shouldBe(Condition.visible);
+    }
+
+    /**
+     * Clicks the logout action in the side menu.
+     */
+    public void logoutFromSideMenu() {
+        if (!$(LOGOUT_LINK).is(Condition.visible)) {
+            openBurgerMenu();
+        }
+
+        $(LOGOUT_LINK).shouldBe(Condition.visible, Condition.enabled).click();
     }
 }

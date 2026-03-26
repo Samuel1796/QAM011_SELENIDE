@@ -1,5 +1,6 @@
 package org.example.tests;
 
+import com.codeborne.selenide.WebDriverRunner;
 import io.qameta.allure.Description;
 import io.qameta.allure.Severity;
 import io.qameta.allure.SeverityLevel;
@@ -59,8 +60,8 @@ public class CartTest extends BaseTest {
         String firstName  = productsPage.getProductNames().get(0);
         String secondName = productsPage.getProductNames().get(1);
 
-        productsPage.addItemToCartByIndex(0);
-        productsPage.addItemToCartByIndex(1);
+        productsPage.addItemToCartByName(firstName);
+        productsPage.addItemToCartByName(secondName);
         productsPage.goToCart();
 
         assertThat(cartPage.getCartItemNames()).contains(firstName, secondName);
@@ -99,5 +100,38 @@ public class CartTest extends BaseTest {
         cartPage.removeItem(productName);
 
         assertThat(cartPage.isCartBadgeVisible()).isFalse();
+    }
+
+    /**
+     * Verifies that adding two products updates the cart badge count to two.
+     */
+    @Test
+    @Story("Cart")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Cart badge count reflects number of added items")
+    void cartBadgeCountReflectsNumberOfAddedItems() {
+        String firstName  = productsPage.getProductNames().get(0);
+        String secondName = productsPage.getProductNames().get(1);
+
+        productsPage.addItemToCartByName(firstName);
+        productsPage.addItemToCartByName(secondName);
+
+        assertThat(productsPage.getCartBadgeCount()).isEqualTo(2);
+    }
+
+    /**
+     * Verifies that "Continue Shopping" returns the user from cart to products page.
+     */
+    @Test
+    @Story("Cart")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Continue shopping navigates back to products page")
+    void continueShoppingNavigatesBackToProductsPage() {
+        productsPage.addFirstItemToCart();
+        productsPage.goToCart();
+
+        cartPage.continueShopping();
+
+        assertThat(WebDriverRunner.url()).contains("/inventory.html");
     }
 }

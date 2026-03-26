@@ -35,6 +35,9 @@ public class CheckoutPage {
     /** Data-test selector for the "Continue" button on step one. */
     private static final String CONTINUE_BUTTON = "[data-test='continue']";
 
+    /** Data-test selector for the "Cancel" button on checkout pages. */
+    private static final String CANCEL_BUTTON = "[data-test='cancel']";
+
     /** Data-test selector for the "Finish" button on step two. */
     private static final String FINISH_BUTTON = "[data-test='finish']";
 
@@ -71,6 +74,13 @@ public class CheckoutPage {
      */
     public void continueCheckout() {
         $(CONTINUE_BUTTON).click();
+    }
+
+    /**
+     * Clicks the "Cancel" button from checkout to navigate back.
+     */
+    public void cancelCheckout() {
+        $(CANCEL_BUTTON).click();
     }
 
     /**

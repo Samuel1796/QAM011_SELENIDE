@@ -10,6 +10,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
+import java.util.ArrayList;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -86,5 +87,55 @@ public class ProductsTest extends BaseTest {
         productDetailPage.backToProducts();
 
         assertThat(productsPage.getCartBadgeCount()).isEqualTo(1);
+    }
+
+    /**
+     * Verifies that sorting by name descending (Z to A) updates the list order accordingly.
+     */
+    @Test
+    @Story("Product Browsing")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Sorting by Z to A shows names in descending order")
+    void sortingByNameDescendingUpdatesProductOrder() {
+        productsPage.sortBy("za");
+
+        var actualNames = productsPage.getProductNames();
+        var expectedNames = new ArrayList<>(actualNames);
+        expectedNames.sort((left, right) -> right.compareToIgnoreCase(left));
+
+        assertThat(actualNames).containsExactlyElementsOf(expectedNames);
+    }
+
+    /**
+     * Verifies that sorting by price low-to-high orders prices in ascending numeric order.
+     */
+    @Test
+    @Story("Product Browsing")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Sorting by price low to high shows ascending prices")
+    void sortingByPriceLowToHighShowsAscendingPrices() {
+        productsPage.sortBy("lohi");
+
+        var actualPrices = productsPage.getProductPrices();
+        var expectedPrices = new ArrayList<>(actualPrices);
+        expectedPrices.sort(Double::compareTo);
+
+        assertThat(actualPrices).containsExactlyElementsOf(expectedPrices);
+    }
+
+    /**
+     * Verifies that removing the same item from the products page clears the cart badge.
+     */
+    @Test
+    @Story("Product Browsing")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Removing an item from products page clears badge when cart becomes empty")
+    void removingItemFromProductsPageClearsBadgeWhenCartEmpty() {
+        productsPage.addFirstItemToCart();
+        assertThat(productsPage.getCartBadgeCount()).isEqualTo(1);
+
+        productsPage.removeItemFromCartByIndex(0);
+
+        assertThat(productsPage.getCartBadgeCount()).isEqualTo(0);
     }
 }

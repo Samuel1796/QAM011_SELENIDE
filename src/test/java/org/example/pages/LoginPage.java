@@ -1,5 +1,6 @@
 package org.example.pages;
 
+import com.codeborne.selenide.Condition;
 import org.example.util.SelenideHelper;
 
 import static com.codeborne.selenide.Selenide.$;
@@ -71,5 +72,14 @@ public class LoginPage {
      */
     public String getErrorMessage() {
         return SelenideHelper.getOptionalText(ERROR_MESSAGE);
+    }
+
+    /**
+     * Returns whether the login button is visible on the login page.
+     *
+     * @return {@code true} if login button is visible, {@code false} otherwise
+     */
+    public boolean isLoginButtonVisible() {
+        return $(LOGIN_BUTTON).exists() && $(LOGIN_BUTTON).is(Condition.visible);
     }
 }

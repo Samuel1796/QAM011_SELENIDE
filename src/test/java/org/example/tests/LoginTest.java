@@ -1,6 +1,7 @@
 package org.example.tests;
 
 import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.WebDriverRunner;
 import io.qameta.allure.Description;
 import io.qameta.allure.Severity;
 import io.qameta.allure.SeverityLevel;
@@ -101,5 +102,22 @@ public class LoginTest extends BaseTest {
 
         assertThat(loginPage.getErrorMessage())
                 .contains("Sorry, this user has been locked out");
+    }
+
+    /**
+     * Verifies the dedicated logout flow from products page side menu.
+     */
+    @Test
+    @Story("Login")
+    @Severity(SeverityLevel.CRITICAL)
+    @Description("User can log out via burger menu and returns to login page")
+    void logoutViaBurgerMenuReturnsToLoginPage() {
+        loginAs(TestUser.STANDARD);
+
+        productsPage.openBurgerMenu();
+        productsPage.logoutFromSideMenu();
+
+        assertThat(WebDriverRunner.url()).doesNotContain("/inventory.html");
+        assertThat(loginPage.isLoginButtonVisible()).isTrue();
     }
 }

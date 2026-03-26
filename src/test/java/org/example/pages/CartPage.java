@@ -29,6 +29,9 @@ public class CartPage {
     /** Data-test selector for the "Checkout" button. */
     private static final String CHECKOUT_BUTTON = "[data-test='checkout']";
 
+    /** Data-test selector for the "Continue Shopping" button. */
+    private static final String CONTINUE_SHOPPING_BUTTON = "[data-test='continue-shopping']";
+
     /**
      * Returns the names of all items currently in the cart.
      *
@@ -76,5 +79,12 @@ public class CartPage {
      */
     public void proceedToCheckout() {
         $(CHECKOUT_BUTTON).click();
+    }
+
+    /**
+     * Clicks the "Continue Shopping" button to return to the products page.
+     */
+    public void continueShopping() {
+        $(CONTINUE_SHOPPING_BUTTON).click();
     }
 }

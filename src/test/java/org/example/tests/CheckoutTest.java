@@ -1,6 +1,7 @@
 package org.example.tests;
 
 import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.WebDriverRunner;
 import io.qameta.allure.Description;
 import io.qameta.allure.Severity;
 import io.qameta.allure.SeverityLevel;
@@ -107,5 +108,46 @@ public class CheckoutTest extends BaseTest {
         checkoutPage.continueCheckout();
 
         assertThat(checkoutPage.getErrorMessage()).contains("First Name is required");
+    }
+
+    /**
+     * Verifies that submitting with an empty last name shows the expected validation error.
+     */
+    @Test
+    @Story("Checkout")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Empty last name shows validation error")
+    void emptyLastNameShowsError() {
+        checkoutPage.enterShippingInfo(new ShippingInfo("John", "", "12345"));
+        checkoutPage.continueCheckout();
+
+        assertThat(checkoutPage.getErrorMessage()).contains("Last Name is required");
+    }
+
+    /**
+     * Verifies that submitting with an empty postal code shows the expected validation error.
+     */
+    @Test
+    @Story("Checkout")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Empty postal code shows validation error")
+    void emptyPostalCodeShowsError() {
+        checkoutPage.enterShippingInfo(new ShippingInfo("John", "Doe", ""));
+        checkoutPage.continueCheckout();
+
+        assertThat(checkoutPage.getErrorMessage()).contains("Postal Code is required");
+    }
+
+    /**
+     * Verifies that cancel from checkout step one returns the user to the cart page.
+     */
+    @Test
+    @Story("Checkout")
+    @Severity(SeverityLevel.NORMAL)
+    @Description("Cancel from checkout step one returns to cart")
+    void cancelFromCheckoutStepOneReturnsToCart() {
+        checkoutPage.cancelCheckout();
+
+        assertThat(WebDriverRunner.url()).contains("/cart.html");
     }
 }
