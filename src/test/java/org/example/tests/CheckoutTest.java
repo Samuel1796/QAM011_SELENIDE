@@ -9,39 +9,25 @@ import io.qameta.allure.Story;
 import org.example.BaseTest;
 import org.example.model.ShippingInfo;
 import org.example.model.TestUser;
+import org.example.util.TestDataProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
+
+import java.util.List;
 
 import static com.codeborne.selenide.Selenide.$;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * Regression test suite for the Swag Labs checkout flow.
- *
- * <p>Covers Requirement 6 (Checkout Flow Tests) and Requirement 8.2 (Regression Suite).
- * All tests are tagged {@code @Tag("regression")} and can be run via
- * {@code mvn verify -Dgroups=regression}.</p>
- *
- * <p>All page interactions use the {@code productsPage}, {@code cartPage}, and
- * {@code checkoutPage} fields inherited from {@link BaseTest} — no inline page
- * object instantiation (DRY).</p>
- *
- * <p>A reusable {@link ShippingInfo} constant {@link #VALID_SHIPPING} is defined
- * once and shared across tests that need valid shipping data (DRY).</p>
+ * Regression tests for the Swag Labs checkout flow.
+ * Covers Requirements 6.1–6.4 and Requirement 8.2.
  */
 @Tag("regression")
 public class CheckoutTest extends BaseTest {
 
-    /**
-     * Reusable valid shipping info used across multiple tests (DRY).
-     */
-    private static final ShippingInfo VALID_SHIPPING = new ShippingInfo("John", "Doe", "12345");
-
-    /**
-     * Logs in, adds one item to the cart, and proceeds to checkout step one
-     * so each test starts on the checkout form page.
-     */
     @BeforeEach
     void setUpCartWithOneItem() {
         loginAs(TestUser.STANDARD);
@@ -50,104 +36,81 @@ public class CheckoutTest extends BaseTest {
         cartPage.proceedToCheckout();
     }
 
-    /**
-     * Verifies that the checkout step-one page displays the first name, last name,
-     * and postal code input fields.
-     */
+    // Happy paths
+
     @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.CRITICAL)
-    @Description("Checkout form requests shipping info fields")
+    @Story("Checkout") @Severity(SeverityLevel.CRITICAL)
+    @Description("Checkout form requests first name, last name, and postal code fields")
     void checkoutFormRequestsShippingInfo() {
         $("[data-test='firstName']").shouldBe(Condition.visible);
         $("[data-test='lastName']").shouldBe(Condition.visible);
         $("[data-test='postalCode']").shouldBe(Condition.visible);
     }
 
-    /**
-     * Verifies that submitting valid shipping info advances to the order summary page
-     * which shows item names and a total price.
-     */
     @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.CRITICAL)
-    @Description("Valid shipping info shows order summary")
+    @Story("Checkout") @Severity(SeverityLevel.CRITICAL)
+    @Description("Valid shipping info shows order summary with item names and total price")
     void validShippingInfoShowsOrderSummary() {
-        checkoutPage.enterShippingInfo(VALID_SHIPPING);
+        checkoutPage.enterShippingInfo(TestDataProvider.VALID_SHIPPING);
         checkoutPage.continueCheckout();
 
         assertThat(checkoutPage.getItemNames()).isNotEmpty();
-        assertThat(checkoutPage.getTotalPrice()).isNotBlank();
+        assertThat(checkoutPage.getTotalPrice()).matches(".*\\$\\d+\\.\\d{2}.*");
     }
 
-    /**
-     * Verifies that completing the order displays the "Thank you for your order" confirmation.
-     */
     @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.CRITICAL)
+    @Story("Checkout") @Severity(SeverityLevel.CRITICAL)
     @Description("Completing order shows confirmation message")
     void completingOrderShowsConfirmationMessage() {
-        checkoutPage.enterShippingInfo(VALID_SHIPPING);
+        checkoutPage.enterShippingInfo(TestDataProvider.VALID_SHIPPING);
         checkoutPage.continueCheckout();
         checkoutPage.finishOrder();
 
         assertThat(checkoutPage.getConfirmationMessage()).contains("Thank you for your order");
     }
 
-    /**
-     * Verifies that submitting the checkout form with an empty first name field
-     * displays the "First Name is required" validation error.
-     */
-    @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.NORMAL)
-    @Description("Empty first name shows validation error")
-    void emptyFirstNameShowsError() {
-        checkoutPage.enterShippingInfo(new ShippingInfo("", "Doe", "12345"));
-        checkoutPage.continueCheckout();
+    // Parameterised empty-field validation (boundary — each required field)
 
-        assertThat(checkoutPage.getErrorMessage()).contains("First Name is required");
+    @ParameterizedTest(name = "shipping={0} -> error contains ''{1}''")
+    @MethodSource("org.example.util.TestDataProvider#invalidShippingRows")
+    @Story("Checkout") @Severity(SeverityLevel.NORMAL)
+    @Description("Each empty required field shows its specific validation error")
+    void emptyRequiredFieldShowsValidationError(ShippingInfo info, String expectedError) {
+        checkoutPage.enterShippingInfo(info);
+        checkoutPage.continueCheckout();
+        assertThat(checkoutPage.getErrorMessage()).contains(expectedError);
     }
 
-    /**
-     * Verifies that submitting with an empty last name shows the expected validation error.
-     */
+    // Navigation / cancel
+
     @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.NORMAL)
-    @Description("Empty last name shows validation error")
-    void emptyLastNameShowsError() {
-        checkoutPage.enterShippingInfo(new ShippingInfo("John", "", "12345"));
-        checkoutPage.continueCheckout();
-
-        assertThat(checkoutPage.getErrorMessage()).contains("Last Name is required");
-    }
-
-    /**
-     * Verifies that submitting with an empty postal code shows the expected validation error.
-     */
-    @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.NORMAL)
-    @Description("Empty postal code shows validation error")
-    void emptyPostalCodeShowsError() {
-        checkoutPage.enterShippingInfo(new ShippingInfo("John", "Doe", ""));
-        checkoutPage.continueCheckout();
-
-        assertThat(checkoutPage.getErrorMessage()).contains("Postal Code is required");
-    }
-
-    /**
-     * Verifies that cancel from checkout step one returns the user to the cart page.
-     */
-    @Test
-    @Story("Checkout")
-    @Severity(SeverityLevel.NORMAL)
+    @Story("Checkout") @Severity(SeverityLevel.NORMAL)
     @Description("Cancel from checkout step one returns to cart")
     void cancelFromCheckoutStepOneReturnsToCart() {
         checkoutPage.cancelCheckout();
-
         assertThat(WebDriverRunner.url()).contains("/cart.html");
+    }
+
+    // Multi-item checkout
+
+    @Test
+    @Story("Checkout") @Severity(SeverityLevel.NORMAL)
+    @Description("Order summary lists all items added to cart before checkout")
+    void orderSummaryListsAllCartItems() {
+        checkoutPage.cancelCheckout();
+        cartPage.continueShopping();
+
+        List<String> names = productsPage.getProductNames();
+        String second = names.get(1);
+        String third  = names.get(2);
+        productsPage.addItemToCartByName(second);
+        productsPage.addItemToCartByName(third);
+        productsPage.goToCart();
+        cartPage.proceedToCheckout();
+
+        checkoutPage.enterShippingInfo(TestDataProvider.VALID_SHIPPING);
+        checkoutPage.continueCheckout();
+
+        assertThat(checkoutPage.getItemNames()).contains(names.get(0), second, third);
     }
 }

@@ -1,6 +1,7 @@
 package org.example.pages;
 
 import com.codeborne.selenide.Condition;
+import com.codeborne.selenide.SelenideElement;
 import org.example.util.SelenideHelper;
 
 import static com.codeborne.selenide.Selenide.$;
@@ -81,5 +82,24 @@ public class LoginPage {
      */
     public boolean isLoginButtonVisible() {
         return $(LOGIN_BUTTON).exists() && $(LOGIN_BUTTON).is(Condition.visible);
+    }
+
+    /**
+     * Clears the error message by clicking the dismiss (×) button on the error container.
+     * No-op if no error is currently displayed.
+     */
+    public void dismissError() {
+        SelenideElement dismiss = $(".error-button");
+        if (dismiss.exists() && dismiss.is(Condition.visible)) {
+            dismiss.click();
+        }
+    }
+
+    /**
+     * Returns {@code true} if the error message container is currently visible.
+     */
+    public boolean isErrorVisible() {
+        SelenideElement el = $(ERROR_MESSAGE);
+        return el.exists() && el.is(Condition.visible);
     }
 }

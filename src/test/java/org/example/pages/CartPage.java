@@ -87,4 +87,22 @@ public class CartPage {
     public void continueShopping() {
         $(CONTINUE_SHOPPING_BUTTON).click();
     }
+
+    /**
+     * Returns the number of items currently in the cart.
+     */
+    public int getCartItemCount() {
+        return getCartItemNames().size();
+    }
+
+    /**
+     * Returns the quantity label for the item at the given zero-based index.
+     * SauceDemo shows quantity as a number in a {@code .cart_quantity} element.
+     *
+     * @param index zero-based index of the cart item
+     * @return the quantity string (e.g. {@code "1"})
+     */
+    public String getItemQuantity(int index) {
+        return $$(CART_ITEM_ROW).get(index).$(".cart_quantity").getText().trim();
+    }
 }

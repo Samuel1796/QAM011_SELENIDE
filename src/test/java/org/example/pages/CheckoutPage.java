@@ -132,4 +132,27 @@ public class CheckoutPage {
     public String getErrorMessage() {
         return SelenideHelper.getOptionalText(ERROR_MESSAGE);
     }
+
+    /**
+     * Returns the number of items listed in the order summary on step two.
+     */
+    public int getItemCount() {
+        return $$(SUMMARY_ITEM_NAME).texts().size();
+    }
+
+    /**
+     * Returns the sub-total label text (before tax) from the order summary.
+     * Example: {@code "Item total: $29.99"}
+     */
+    public String getSubtotal() {
+        return SelenideHelper.getOptionalText(".summary_subtotal_label");
+    }
+
+    /**
+     * Returns the tax label text from the order summary.
+     * Example: {@code "Tax: $2.40"}
+     */
+    public String getTax() {
+        return SelenideHelper.getOptionalText(".summary_tax_label");
+    }
 }
