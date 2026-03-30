@@ -69,6 +69,16 @@ public class CheckoutTest extends BaseTest {
         assertThat(checkoutPage.getConfirmationMessage()).contains("Thank you for your order");
     }
 
+    @Test
+    @Story("Checkout") @Severity(SeverityLevel.NORMAL)
+    @Description("Empty first name shows the required-field validation error")
+    void emptyFirstNameShowsError() {
+        checkoutPage.enterShippingInfo(TestDataProvider.MISSING_FIRST_NAME);
+        checkoutPage.continueCheckout();
+
+        assertThat(checkoutPage.getErrorMessage()).contains("First Name is required");
+    }
+
     // Parameterised empty-field validation (boundary — each required field)
 
     @ParameterizedTest(name = "shipping={0} -> error contains ''{1}''")

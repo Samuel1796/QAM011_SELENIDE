@@ -25,6 +25,7 @@ jobs:
           cache: 'maven'
 
       - name: Run tests
+        id: run_tests
         # Pass headless flag as a Maven system property so Selenide picks it up
         # directly from the properties mechanism — no env var needed.
         run: mvn verify -Dselenide.headless=true
@@ -100,11 +101,11 @@ jobs:
 
       # ── Failure notification ──────────────────────────────────────────────
       - name: Notify on failure via Slack
-        if: failure()
+        if: ${{ always() && steps.run_tests.outcome == 'failure' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v1.27.0
         with:
-          payload: '{"text": "Tests failed on ${{ github.ref }} - ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+          payload: '{"text": "Tests failed on ${{ github.ref_name }}. GitHub Actions results: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }} | Allure report: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"}'
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -1,5 +1,6 @@
 package org.example.pages;
 
+import com.codeborne.selenide.Condition;
 import org.example.model.ShippingInfo;
 import org.example.util.SelenideHelper;
 
@@ -127,10 +128,10 @@ public class CheckoutPage {
      * <p>Delegates to {@link SelenideHelper#getOptionalText(String)} to safely handle
      * the case where no error element is present (DRY — same pattern as {@link LoginPage}).</p>
      *
-     * @return the error message text, or {@code ""} if no error is displayed
+     * @return the visible validation error message text
      */
     public String getErrorMessage() {
-        return SelenideHelper.getOptionalText(ERROR_MESSAGE);
+        return $(ERROR_MESSAGE).shouldBe(Condition.visible).getText();
     }
 
     /**
