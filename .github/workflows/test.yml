@@ -20,9 +20,9 @@ jobs:
       - name: Set up JDK 17
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
-          cache: 'maven'
+          java-version: "17"
+          distribution: "temurin"
+          cache: "maven"
 
       - name: Run tests
         id: run_tests
@@ -36,12 +36,12 @@ jobs:
           wget -qO allure.tgz "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz"
           tar -xzf allure.tgz
           sudo mv allure-${ALLURE_VERSION} /opt/allure
-          sudo ln -sf /opt/allure/bin/allure /usr/local/bin/allure
+          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
 
       - name: Get Allure history from gh-pages
+        uses: actions/checkout@v4
         if: always()
         continue-on-error: true
-        uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: gh-pages
@@ -52,9 +52,6 @@ jobs:
         run: |
           if [ -d "gh-pages/history" ]; then
             cp -r gh-pages/history target/allure-results/history
-            echo "History copied from previous run."
-          else
-            echo "No previous history - first run."
           fi
 
       - name: Generate Allure HTML report
@@ -62,8 +59,8 @@ jobs:
         run: allure generate target/allure-results --clean -o allure-report
 
       - name: Deploy Allure report to GitHub Pages
-        if: always()
         uses: peaceiris/actions-gh-pages@v4
+        if: always()
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
@@ -71,153 +68,120 @@ jobs:
           force_orphan: true
 
       - name: Upload Allure results
-        if: always()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: allure-results
           path: target/allure-results/
 
       - name: Upload screenshots
-        if: always()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: screenshots
           path: target/screenshots/
           if-no-files-found: ignore
 
       - name: Upload Allure report
-        if: always()
         uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: allure-report
           path: allure-report/
 
-      - name: Write Surefire parser script
-        if: always()
-        run: |
-          cat > /tmp/parse_surefire.py << 'PYEOF'
-          import os
-          import sys
-          import xml.etree.ElementTree as ET
-
-          reports_dir = "target/surefire-reports"
-          total = failed = skipped = 0
-          failed_tests = []
-
-          if os.path.isdir(reports_dir):
-              for fname in sorted(os.listdir(reports_dir)):
-                  if not fname.startswith("TEST-") or not fname.endswith(".xml"):
-                      continue
-
-                  fpath = os.path.join(reports_dir, fname)
-                  try:
-                      tree = ET.parse(fpath)
-                      root = tree.getroot()
-                      suite = root if root.tag == "testsuite" else root.find("testsuite")
-                      if suite is None:
-                          suite = root
-
-                      total += int(suite.get("tests", 0))
-                      failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
-                      skipped += int(suite.get("skipped", 0))
-
-                      for tc in tree.findall(".//testcase"):
-                          if tc.find("failure") is not None or tc.find("error") is not None:
-                              classname = tc.get("classname", "")
-                              name = tc.get("name", "")
-                              failed_tests.append(f"{classname}.{name}")
-                  except Exception as ex:
-                      print(f"WARN: could not parse {fpath}: {ex}", file=sys.stderr)
-
-          passed = total - failed - skipped
-          summary = (
-              f"* Total: {total}\\n"
-              f"* Passed: {passed}\\n"
-              f"* Failed: {failed}\\n"
-              f"* Skipped: {skipped}"
-          )
-
-          if failed_tests:
-              failures = "\\n".join(f"* {t}" for t in failed_tests)
-          else:
-              failures = "* None"
-
-          print(f"SUMMARY<<ENDOFVAR\\n{summary}\\nENDOFVAR")
-          print(f"FAILURES<<ENDOFVAR\\n{failures}\\nENDOFVAR")
-          PYEOF
-
+      # Parse Surefire XML reports — python3 -c avoids heredoc/quote issues in YAML
       - name: Parse Surefire reports
         id: surefire
-        if: always()
-        run: python3 /tmp/parse_surefire.py >> "$GITHUB_OUTPUT"
-
-      - name: Build Slack payload
-        if: always()
+        if: always() && steps.run_tests.outcome == 'failure'
         run: |
-          if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
-            STATUS_ICON="PASS"
-            STATUS_TEXT="Test Suite Passed"
-          else
-            STATUS_ICON="FAIL"
-            STATUS_TEXT="Test Suite Failed"
-          fi
+          python3 -c "
+          import os, sys, xml.etree.ElementTree as ET
+          d = 'target/surefire-reports'
+          total = failed = skipped = 0
+          names = []
+          if os.path.isdir(d):
+              for f in sorted(os.listdir(d)):
+                  if not f.startswith('TEST-') or not f.endswith('.xml'):
+                      continue
+                  try:
+                      root = ET.parse(os.path.join(d, f)).getroot()
+                      s = root if root.tag == 'testsuite' else (root.find('testsuite') or root)
+                      total   += int(s.get('tests',    0) or 0)
+                      failed  += int(s.get('failures', 0) or 0) + int(s.get('errors', 0) or 0)
+                      skipped += int(s.get('skipped',  0) or 0)
+                      for tc in root.findall('.//testcase'):
+                          if tc.find('failure') is not None or tc.find('error') is not None:
+                              names.append(tc.get('classname','') + '.' + tc.get('name',''))
+                  except Exception as e:
+                      print('WARN:', e, file=sys.stderr)
+          passed = total - failed - skipped
+          summary = 'Total: ' + str(total) + '\nPassed: ' + str(passed) + '\nFailed: ' + str(failed) + '\nSkipped: ' + str(skipped)
+          failures = '\n'.join('* ' + n for n in names) if names else '* (no names found)'
+          out = open(os.environ['GITHUB_OUTPUT'], 'a')
+          out.write('SUMMARY<<EOF\n' + summary + '\nEOF\n')
+          out.write('FAILURES<<EOF\n' + failures + '\nEOF\n')
+          out.close()
+          "
 
-          jq -n \
-            --arg status_icon "$STATUS_ICON" \
-            --arg status_text "$STATUS_TEXT" \
-            --arg repo "${{ github.repository }}" \
-            --arg repo_url "${{ github.server_url }}/${{ github.repository }}" \
-            --arg branch "${{ github.ref_name }}" \
-            --arg actor "${{ github.actor }}" \
-            --arg sha "${{ github.sha }}" \
-            --arg sha_url "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
-            --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
-            --arg report_url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
-            --arg summary "${{ steps.surefire.outputs.SUMMARY }}" \
-            --arg failures "${{ steps.surefire.outputs.FAILURES }}" \
-            '{
-              blocks: [
-                {
-                  type: "header",
-                  text: { type: "plain_text", text: ($status_icon + " " + $status_text), emoji: true }
-                },
-                {
-                  type: "section",
-                  fields: [
-                    { type: "mrkdwn", text: ("*Repository:*\\n<" + $repo_url + "|" + $repo + ">") },
-                    { type: "mrkdwn", text: ("*Branch:*\\n`" + $branch + "`") },
-                    { type: "mrkdwn", text: ("*Triggered by:*\\n" + $actor) },
-                    { type: "mrkdwn", text: ("*Commit:*\\n<" + $sha_url + "|`" + ($sha | .[0:7]) + "`>") }
-                  ]
-                },
-                {
-                  type: "section",
-                  text: { type: "mrkdwn", text: ("*Test summary*\\n" + $summary) }
-                },
-                {
-                  type: "section",
-                  text: { type: "mrkdwn", text: ("*Failed tests*\\n" + $failures) }
-                },
-                {
-                  type: "actions",
-                  elements: [
-                    {
-                      type: "button",
-                      text: { type: "plain_text", text: "View Run Logs", emoji: true },
-                      url: $run_url
-                    },
-                    {
-                      type: "button",
-                      text: { type: "plain_text", text: "Allure Report (GitHub Pages)", emoji: true },
-                      url: $report_url
-                    }
-                  ]
-                }
-              ]
-            }' > /tmp/slack_payload.json
+      # Build Slack payload — jq filter written via printf to avoid single-quote issues in YAML
+      - name: Build Slack payload
+        if: always() && steps.run_tests.outcome == 'failure'
+        env:
+          REPO: ${{ github.repository }}
+          REPO_URL: ${{ github.server_url }}/${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          ACTOR: ${{ github.actor }}
+          SHA: ${{ github.sha }}
+          SHA_URL: ${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          REPORT_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+          SUMMARY: ${{ steps.surefire.outputs.SUMMARY }}
+          FAILURES: ${{ steps.surefire.outputs.FAILURES }}
+        run: |
+          printf '%s' '{
+            "blocks": [
+              {"type":"header","text":{"type":"plain_text","text":"Test Suite Failed","emoji":true}},
+              {"type":"section","fields":[
+                {"type":"mrkdwn","text":"*Repository:*\nREPO_PLACEHOLDER"},
+                {"type":"mrkdwn","text":"*Branch:*\nBRANCH_PLACEHOLDER"},
+                {"type":"mrkdwn","text":"*Triggered by:*\nACTOR_PLACEHOLDER"},
+                {"type":"mrkdwn","text":"*Commit:*\nSHA_PLACEHOLDER"}
+              ]},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Test summary*\nSUMMARY_PLACEHOLDER"}},
+              {"type":"section","text":{"type":"mrkdwn","text":"*Failed tests*\nFAILURES_PLACEHOLDER"}},
+              {"type":"actions","elements":[
+                {"type":"button","text":{"type":"plain_text","text":"View Run Logs","emoji":true},"url":"RUN_URL_PLACEHOLDER"},
+                {"type":"button","text":{"type":"plain_text","text":"Allure Report","emoji":true},"url":"REPORT_URL_PLACEHOLDER"}
+              ]},
+              {"type":"context","elements":[
+                {"type":"mrkdwn","text":"Screenshots and Allure results are attached as build artifacts."}
+              ]}
+            ]
+          }' > /tmp/raw_payload.json
 
-      - name: Notify via Slack
-        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
+          python3 -c "
+          import json, os
+          with open('/tmp/raw_payload.json') as f:
+              text = f.read()
+          sha = os.environ['SHA'][:7]
+          repo_link = '<' + os.environ['REPO_URL'] + '|' + os.environ['REPO'] + '>'
+          sha_link  = '<' + os.environ['SHA_URL']  + '|' + sha + '>'
+          text = text.replace('REPO_PLACEHOLDER',    repo_link)
+          text = text.replace('BRANCH_PLACEHOLDER',  os.environ['BRANCH'])
+          text = text.replace('ACTOR_PLACEHOLDER',   os.environ['ACTOR'])
+          text = text.replace('SHA_PLACEHOLDER',     sha_link)
+          text = text.replace('SUMMARY_PLACEHOLDER', os.environ['SUMMARY'].replace(chr(10), r'\n'))
+          text = text.replace('FAILURES_PLACEHOLDER',os.environ['FAILURES'].replace(chr(10), r'\n'))
+          text = text.replace('RUN_URL_PLACEHOLDER',    os.environ['RUN_URL'])
+          text = text.replace('REPORT_URL_PLACEHOLDER', os.environ['REPORT_URL'])
+          json.loads(text)
+          with open('/tmp/slack_payload.json', 'w') as f:
+              f.write(text)
+          print('Payload written OK')
+          "
+
+      - name: Notify on failure via Slack
+        if: always() && steps.run_tests.outcome == 'failure'
         continue-on-error: true
         uses: slackapi/slack-github-action@v1.27.0
         with:
