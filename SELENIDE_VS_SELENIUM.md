@@ -1,6 +1,6 @@
 # Selenide vs Selenium — What This Project Does Differently
 
-This document explains the concrete advantages Selenide provides over raw Selenium in this project. For each point, it shows what the equivalent Selenium code would look like, then what was done here with Selenide instead.
+This document explains the concrete advantages Selenide provides over raw Selenium in this project. For each point it shows what the equivalent Selenium code would look like, then what was done here with Selenide, and which file in the project contains that implementation.
 
 ---
 
@@ -11,17 +11,21 @@ In Selenium, every interaction with a dynamic element requires a manual wait. Fo
 **Selenium approach:**
 ```java
 WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
-WebElement element = wait.until(ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".inventory_list")));
-element.click();
+WebElement element = wait.until(
+    ExpectedConditions.visibilityOfElementLocated(By.cssSelector(".inventory_list"))
+);
 ```
 
-**What this project does with Selenide:**
+**Selenide in this project:**
 ```java
+// src/test/java/org/example/tests/LoginTest.java
 $(".inventory_list").shouldBe(Condition.visible);
-$("[data-test='add-to-cart']").click();
+
+// src/main/java/org/example/pages/CheckoutPage.java
+$(ERROR_MESSAGE).shouldBe(Condition.visible).getText();
 ```
 
-Selenide polls automatically up to the configured `selenide.timeout` (8 seconds here). Every `$()` call, every `.click()`, every `.setValue()` waits for the element to be in the right state before acting. There is not a single `Thread.sleep()` or `WebDriverWait` in this codebase.
+Selenide polls automatically up to the configured `selenide.timeout` (8 seconds, set in `src/test/resources/selenide.properties`). Every `$()` call, every `.click()`, every `.setValue()` waits for the element to be in the right state before acting. There is not a single `Thread.sleep()` or `WebDriverWait` in this codebase.
 
 ---
 
@@ -36,14 +40,20 @@ driver.findElement(By.cssSelector("#password")).sendKeys("secret_sauce");
 driver.findElement(By.cssSelector("#login-button")).click();
 ```
 
-**What this project does with Selenide (`LoginPage.java`):**
+**Selenide in this project:**
 ```java
-$(USERNAME_INPUT).setValue(username);
-$(PASSWORD_INPUT).setValue(password);
-$(LOGIN_BUTTON).click();
+// src/main/java/org/example/pages/LoginPage.java
+public LoginPage enterUsername(String username) {
+    $(USERNAME_INPUT).setValue(username);   // USERNAME_INPUT = "#user-name"
+    return this;
+}
+
+public void submit() {
+    $(LOGIN_BUTTON).click();               // LOGIN_BUTTON = "#login-button"
+}
 ```
 
-`$()` is a static import from `Selenide`. It accepts any CSS selector and returns a `SelenideElement` — a smart wrapper that adds auto-waiting, fluent assertions, and scoped child lookups. `$$()` returns an `ElementsCollection` for multi-element operations.
+`$()` is a static import from `Selenide`. It accepts any CSS selector and returns a `SelenideElement` — a smart wrapper that adds auto-waiting, fluent assertions, and scoped child lookups. `$$()` returns an `ElementsCollection` for multi-element operations and is used throughout `ProductsPage`, `CartPage`, and `CheckoutPage`.
 
 ---
 
@@ -62,12 +72,15 @@ for (WebElement row : rows) {
 }
 ```
 
-**What this project does with Selenide (`CartPage.java`):**
+**Selenide in this project:**
 ```java
-$$(CART_ITEM_ROW).findBy(Condition.text(name)).$(REMOVE_BUTTON).click();
+// src/main/java/org/example/pages/CartPage.java
+public void removeItem(String name) {
+    $$(CART_ITEM_ROW).findBy(Condition.text(name)).$(REMOVE_BUTTON).click();
+}
 ```
 
-`$$(selector).findBy(condition)` finds the first matching element in a collection. The `.$(childSelector)` call then scopes the child lookup to that specific row. This is one readable line instead of a loop.
+`$$(selector).findBy(condition)` finds the first matching element in a collection. The `.$(childSelector)` call then scopes the child lookup to that specific row. One readable line instead of a loop. The same pattern is used in `ProductsPage.addItemToCartByName()`.
 
 ---
 
@@ -84,14 +97,25 @@ for (WebElement el : elements) {
 }
 ```
 
-**What this project does with Selenide (`ProductsPage.java`):**
+**Selenide in this project:**
 ```java
+// src/main/java/org/example/pages/ProductsPage.java
 public List<String> getProductNames() {
     return $$(PRODUCT_NAME).texts();
 }
+
+// src/main/java/org/example/pages/CartPage.java
+public List<String> getCartItemNames() {
+    return $$(CART_ITEM_NAME).texts();
+}
+
+// src/main/java/org/example/pages/CheckoutPage.java
+public List<String> getItemNames() {
+    return $$(SUMMARY_ITEM_NAME).texts();
+}
 ```
 
-`ElementsCollection.texts()` returns a `List<String>` of the visible text of every matching element in one call. Used throughout the page objects for product names, cart item names, and order summary items.
+`ElementsCollection.texts()` returns a `List<String>` of the visible text of every matching element in one call. Used in three page objects across the project.
 
 ---
 
@@ -101,46 +125,52 @@ In Selenium, asserting element state requires reading a property and asserting s
 
 **Selenium approach:**
 ```java
+// No waiting — can fail if the element hasn't appeared yet
 WebElement badge = driver.findElement(By.cssSelector(".shopping_cart_badge"));
 assertTrue(badge.isDisplayed());
-assertEquals("2", badge.getText());
 ```
 
-**What this project does with Selenide (`CheckoutPage.java`):**
+**Selenide in this project:**
 ```java
+// src/main/java/org/example/pages/CheckoutPage.java
 public String getErrorMessage() {
+    // Waits up to 8s for the error to appear, then reads its text
     return $(ERROR_MESSAGE).shouldBe(Condition.visible).getText();
 }
+
+// src/test/java/org/example/tests/LoginTest.java
+$(".inventory_list").shouldBe(Condition.visible);
 ```
 
-`shouldBe(Condition.visible)` waits for the element to become visible (up to the timeout) and throws a descriptive `ElementNotFound` exception with a screenshot if it does not. The assertion and the wait are the same operation — no separate `WebDriverWait` needed.
+`shouldBe(Condition.visible)` waits for the element to become visible (up to the timeout) and throws a descriptive `ElementNotFound` exception with a screenshot if it does not. The assertion and the wait are the same operation.
 
 ---
 
-## 6. Automatic screenshot on failure — no custom code needed
+## 6. Automatic screenshot on failure — no custom code in tests
 
-In Selenium, capturing a screenshot on test failure requires a custom `TestRule` or `@AfterEach` that calls `((TakesScreenshot) driver).getScreenshotAs(...)` and handles file I/O manually.
+In Selenium, capturing a screenshot on test failure requires a custom `TestRule` or `@AfterEach` that calls `((TakesScreenshot) driver).getScreenshotAs(...)` and handles file I/O manually in every test class.
 
 **Selenium approach:**
 ```java
+// Repeated in every test class
 @AfterEach
 void tearDown(TestInfo info) {
-    if (testFailed) { // need to track this manually
-        File screenshot = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
-        Files.copy(screenshot.toPath(), Paths.get("target/screenshots/" + info.getDisplayName() + ".png"));
+    if (testFailed) {
+        File src = ((TakesScreenshot) driver).getScreenshotAs(OutputType.FILE);
+        Files.copy(src.toPath(), Paths.get("screenshots/" + info.getDisplayName() + ".png"));
     }
     driver.quit();
 }
 ```
 
-**What this project does:**
+**Selenide in this project:**
 
-`ScreenshotWatcher.java` implements JUnit 5's `TestWatcher`. It is registered once on `BaseTest` via `@ExtendWith(ScreenshotWatcher.class)` and fires automatically for every test class that extends `BaseTest`. On failure it:
+`src/test/java/org/example/ScreenshotWatcher.java` implements JUnit 5's `TestWatcher`. It is registered once on `BaseTest` via `@ExtendWith(ScreenshotWatcher.class)` and fires automatically for every test class that extends `BaseTest`. On failure it:
 1. Captures the PNG via the WebDriver API
 2. Attaches it inline to the Allure report
-3. Writes it to `target/screenshots/{ClassName}_{method}_{timestamp}.png`
+3. Writes it to `target/screenshots/{ClassName}_{method}_{timestamp}.png` using `ScreenshotNamer.buildName()` from `src/main/java/org/example/util/ScreenshotNamer.java`
 
-Additionally, `AllureSelenide` (registered in `BaseTest.setUp()`) intercepts Selenide assertion failures and attaches screenshots automatically to the Allure report — no extra code in any test class.
+Additionally, `AllureSelenide` (registered in `src/test/java/org/example/BaseTest.java` `setUp()`) intercepts Selenide assertion failures and attaches screenshots automatically — no extra code in any test class.
 
 ---
 
@@ -160,7 +190,7 @@ void setUp() {
 }
 ```
 
-**What this project does:**
+**Selenide in this project:**
 
 `src/test/resources/selenide.properties`:
 ```properties
@@ -170,13 +200,13 @@ selenide.headless=true
 selenide.timeout=8000
 ```
 
-Selenide reads this file automatically at startup. `BaseTest.setUp()` only needs:
+Selenide reads this file automatically at startup. `src/test/java/org/example/BaseTest.java` `setUp()` only needs:
 ```java
-BrowserConfig.applyBrowserOptions(); // adds --no-sandbox etc. for CI
+BrowserConfig.applyBrowserOptions(); // adds --no-sandbox etc. for CI (BrowserConfig.java)
 open("/");                            // opens baseUrl + "/"
 ```
 
-No `new ChromeDriver()`, no `driver.manage().timeouts()`, no URL string in test code.
+`src/main/java/org/example/config/BrowserConfig.java` reads `Configuration.headless` (already set by Selenide from the properties file) and conditionally adds the CI-specific Chrome flags. No `new ChromeDriver()`, no `driver.manage().timeouts()`, no URL string in test code.
 
 ---
 
@@ -191,24 +221,35 @@ field.clear();
 field.sendKeys("standard_user");
 ```
 
-**What this project does with Selenide:**
+**Selenide in this project:**
 ```java
-$(USERNAME_INPUT).setValue(username);
+// src/main/java/org/example/pages/LoginPage.java
+public LoginPage enterUsername(String username) {
+    $(USERNAME_INPUT).setValue(username);  // clears and types atomically
+    return this;
+}
+
+// src/main/java/org/example/pages/CheckoutPage.java
+public void enterShippingInfo(ShippingInfo info) {
+    $(FIRST_NAME).setValue(info.firstName());
+    $(LAST_NAME).setValue(info.lastName());
+    $(POSTAL_CODE).setValue(info.postalCode());
+}
 ```
 
-`setValue()` clears the field and types the new value atomically. This is used in `LoginPage`, `CheckoutPage`, and anywhere a form field is filled. No `.clear()` calls anywhere in the codebase.
+`setValue()` clears the field and types the new value atomically. Used in `LoginPage` and `CheckoutPage`. No `.clear()` calls anywhere in the codebase.
 
 ---
 
 ## Summary
 
-| Concern | Selenium | This project (Selenide) |
+| Concern | Selenium | Selenide — project file |
 |---|---|---|
-| Waiting for elements | Manual `WebDriverWait` everywhere | Automatic — built into every `$()` call |
-| Selector syntax | `driver.findElement(By.cssSelector(...))` | `$(selector)` / `$$(selector)` |
-| Scoped child lookup | Loop + nested `findElement` | `$$(rows).findBy(condition).$(child)` |
-| Collecting element text | Manual loop | `$$(selector).texts()` |
-| Asserting element state | Read property + assert separately | `shouldBe(Condition.visible)` — waits and asserts |
-| Screenshot on failure | Custom `@AfterEach` + file I/O | `ScreenshotWatcher` + `AllureSelenide` listener |
-| Driver setup | `new ChromeDriver()` + timeouts in code | `selenide.properties` file |
-| Typing into fields | `.clear()` + `.sendKeys()` | `.setValue()` |
+| Waiting for elements | Manual `WebDriverWait` everywhere | Auto — built into every `$()` · `selenide.properties` |
+| Selector syntax | `driver.findElement(By.cssSelector(...))` | `$(selector)` / `$$(selector)` · all `pages/*.java` |
+| Scoped child lookup | Loop + nested `findElement` | `$$(rows).findBy(condition).$(child)` · `CartPage.java`, `ProductsPage.java` |
+| Collecting element text | Manual loop | `$$(selector).texts()` · `ProductsPage`, `CartPage`, `CheckoutPage` |
+| Asserting element state | Read property + assert separately | `shouldBe(Condition.visible)` · `CheckoutPage.java`, `LoginTest.java` |
+| Screenshot on failure | Custom `@AfterEach` in every class | `ScreenshotWatcher.java` + `AllureSelenide` in `BaseTest.java` |
+| Driver setup | `new ChromeDriver()` + timeouts in code | `selenide.properties` + `BrowserConfig.java` |
+| Typing into fields | `.clear()` + `.sendKeys()` | `.setValue()` · `LoginPage.java`, `CheckoutPage.java` |

@@ -100,76 +100,71 @@ jobs:
           path: allure-report/
 
       # ── Failure notification ──────────────────────────────────────────────
+      # Build the payload with jq so the commit message is safely escaped
+      # before it touches JSON. Passing raw ${{ }} expressions into a JSON
+      # string literal breaks when the message contains quotes or newlines.
+      - name: Build Slack payload
+        if: ${{ always() && steps.run_tests.outcome == 'failure' }}
+        run: |
+          jq -n \
+            --arg repo      "${{ github.repository }}" \
+            --arg repo_url  "${{ github.server_url }}/${{ github.repository }}" \
+            --arg branch    "${{ github.ref_name }}" \
+            --arg actor     "${{ github.actor }}" \
+            --arg sha       "${{ github.sha }}" \
+            --arg sha_url   "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
+            --arg msg       "${{ github.event.head_commit.message }}" \
+            --arg run_url   "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg report_url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
+            '{
+              blocks: [
+                {
+                  type: "header",
+                  text: { type: "plain_text", text: "❌ Test Suite Failed", emoji: true }
+                },
+                {
+                  type: "section",
+                  fields: [
+                    { type: "mrkdwn", text: ("*Repository:*\n<" + $repo_url + "|" + $repo + ">") },
+                    { type: "mrkdwn", text: ("*Branch:*\n`" + $branch + "`") },
+                    { type: "mrkdwn", text: ("*Triggered by:*\n" + $actor) },
+                    { type: "mrkdwn", text: ("*Commit:*\n<" + $sha_url + "|`" + ($sha | .[0:7]) + "`>") }
+                  ]
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: ("*Commit message:*\n" + $msg) }
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "🔍 View Run Logs", emoji: true },
+                      url: $run_url
+                    },
+                    {
+                      type: "button",
+                      text: { type: "plain_text", text: "📊 Allure Report", emoji: true },
+                      url: $report_url
+                    }
+                  ]
+                },
+                {
+                  type: "context",
+                  elements: [
+                    { type: "mrkdwn", text: "Screenshots and Allure results are attached as build artifacts in the run above." }
+                  ]
+                }
+              ]
+            }' > /tmp/slack_payload.json
+
       - name: Notify on failure via Slack
         if: ${{ always() && steps.run_tests.outcome == 'failure' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v1.27.0
         with:
-          payload: |
-            {
-              "blocks": [
-                {
-                  "type": "header",
-                  "text": {
-                    "type": "plain_text",
-                    "text": "❌ Test Suite Failed",
-                    "emoji": true
-                  }
-                },
-                {
-                  "type": "section",
-                  "fields": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Repository:*\n<${{ github.server_url }}/${{ github.repository }}|${{ github.repository }}>"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Branch:*\n`${{ github.ref_name }}`"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Triggered by:*\n${{ github.actor }}"
-                    },
-                    {
-                      "type": "mrkdwn",
-                      "text": "*Commit:*\n<${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|`${{ github.sha }}`>"
-                    }
-                  ]
-                },
-                {
-                  "type": "section",
-                  "text": {
-                    "type": "mrkdwn",
-                    "text": "*Commit message:*\n${{ github.event.head_commit.message }}"
-                  }
-                },
-                {
-                  "type": "actions",
-                  "elements": [
-                    {
-                      "type": "button",
-                      "text": { "type": "plain_text", "text": "🔍 View Run Logs", "emoji": true },
-                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
-                    },
-                    {
-                      "type": "button",
-                      "text": { "type": "plain_text", "text": "📊 Allure Report", "emoji": true },
-                      "url": "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/"
-                    }
-                  ]
-                },
-                {
-                  "type": "context",
-                  "elements": [
-                    {
-                      "type": "mrkdwn",
-                      "text": "Screenshots and full Allure results are available as build artifacts in the run linked above."
-                    }
-                  ]
-                }
-              ]
-            }
+          payload-file-path: /tmp/slack_payload.json
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
           SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
