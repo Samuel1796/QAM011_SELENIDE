@@ -100,47 +100,59 @@ jobs:
           path: allure-report/
 
       # ── Failure notification ──────────────────────────────────────────────
-      # Parse Surefire XML reports to extract failed test names, then build
-      # the Slack payload with jq so all values are safely escaped.
+      # Parse Surefire XML reports to extract test summary counts and failed
+      # test names, then build the Slack payload with jq for safe escaping.
       - name: Build Slack payload
         if: ${{ always() && steps.run_tests.outcome == 'failure' }}
         run: |
-          # Extract failed test cases from Surefire XML reports.
-          # Each <testcase> that contains a <failure> or <error> child is a failure.
-          # Output format: "ClassName > methodName"
-          FAILED_TESTS=""
+          # ── Aggregate counts from all Surefire XML files ──────────────────
+          TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0
+
           if [ -d "target/surefire-reports" ]; then
-            FAILED_TESTS=$(
-              grep -rh '<testcase' target/surefire-reports/*.xml 2>/dev/null \
-              | grep -E '<failure|<error' \
-              | sed 's/.*classname="\([^"]*\)".*name="\([^"]*\)".*/\1 > \2/' \
-              || true
-            )
+            for f in target/surefire-reports/TEST-*.xml; do
+              [ -f "$f" ] || continue
+              t=$(xmllint  --xpath "string(//testsuite/@tests)"    "$f" 2>/dev/null || echo 0)
+              fa=$(xmllint --xpath "string(//testsuite/@failures)"  "$f" 2>/dev/null || echo 0)
+              er=$(xmllint --xpath "string(//testsuite/@errors)"    "$f" 2>/dev/null || echo 0)
+              sk=$(xmllint --xpath "string(//testsuite/@skipped)"   "$f" 2>/dev/null || echo 0)
+              TOTAL=$((TOTAL   + ${t:-0}))
+              FAILED=$((FAILED + ${fa:-0} + ${er:-0}))
+              SKIPPED=$((SKIPPED + ${sk:-0}))
+            done
+            PASSED=$((TOTAL - FAILED - SKIPPED))
+          fi
 
-            # Fallback: use xmllint if grep approach yields nothing
-            if [ -z "$FAILED_TESTS" ]; then
-              FAILED_TESTS=$(
-                for f in target/surefire-reports/*.xml; do
-                  xmllint --xpath \
-                    "//testcase[failure or error]/@classname | //testcase[failure or error]/@name" \
-                    "$f" 2>/dev/null \
-                  | tr ' ' '\n' \
-                  | sed 's/classname="\(.*\)"/CLASS:\1/' \
-                  | sed 's/name="\(.*\)"/METHOD:\1/' \
-                  | paste - - \
-                  | sed 's/CLASS:\(.*\)\tMETHOD:\(.*\)/\1 > \2/'
-                done || true
+          # ── Extract failed test names as classname.methodname ─────────────
+          FAILED_LIST=""
+          if [ -d "target/surefire-reports" ]; then
+            for f in target/surefire-reports/TEST-*.xml; do
+              [ -f "$f" ] || continue
+              # Pull every <testcase classname="..." name="..."> that has a
+              # <failure> or <error> child element
+              while IFS= read -r line; do
+                classname=$(echo "$line" | sed 's/.*classname="\([^"]*\)".*/\1/')
+                methodname=$(echo "$line" | sed 's/.*name="\([^"]*\)".*/\1/')
+                FAILED_LIST="${FAILED_LIST}• ${classname}.${methodname}\n"
+              done < <(
+                python3 - "$f" <<'PYEOF'
+import sys, xml.etree.ElementTree as ET
+tree = ET.parse(sys.argv[1])
+for tc in tree.findall('.//testcase'):
+    if tc.find('failure') is not None or tc.find('error') is not None:
+        print(f'classname="{tc.get("classname")}" name="{tc.get("name")}"')
+PYEOF
               )
-            fi
+            done
           fi
 
-          # If still empty, show a generic message
-          if [ -z "$FAILED_TESTS" ]; then
-            FAILED_TESTS="Could not extract test names — check the run logs."
-          fi
+          [ -z "$FAILED_LIST" ] && FAILED_LIST="• (no test names found — check run logs)\n"
 
-          # Format as a bullet list for Slack mrkdwn
-          FAILED_LIST=$(echo "$FAILED_TESTS" | sed 's/^/• /')
+          # ── Build summary and failed-tests strings ────────────────────────
+          SUMMARY="• Total: ${TOTAL}\n• Passed: ${PASSED}\n• Failed: ${FAILED}\n• Skipped: ${SKIPPED}"
+
+          # printf to interpret \n escape sequences
+          SUMMARY_TEXT=$(printf "$SUMMARY")
+          FAILED_TEXT=$(printf "$FAILED_LIST")
 
           jq -n \
             --arg repo       "${{ github.repository }}" \
@@ -151,7 +163,8 @@ jobs:
             --arg sha_url    "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
             --arg run_url    "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --arg report_url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
-            --arg failures   "$FAILED_LIST" \
+            --arg summary    "$SUMMARY_TEXT" \
+            --arg failures   "$FAILED_TEXT" \
             '{
               blocks: [
                 {
@@ -169,7 +182,11 @@ jobs:
                 },
                 {
                   type: "section",
-                  text: { type: "mrkdwn", text: ("*Failed tests:*\n" + $failures) }
+                  text: { type: "mrkdwn", text: ("*Test summary*\n" + $summary) }
+                },
+                {
+                  type: "section",
+                  text: { type: "mrkdwn", text: ("*Failed tests*\n" + $failures) }
                 },
                 {
                   type: "actions",
