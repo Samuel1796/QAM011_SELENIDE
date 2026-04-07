@@ -100,22 +100,58 @@ jobs:
           path: allure-report/
 
       # ── Failure notification ──────────────────────────────────────────────
-      # Build the payload with jq so the commit message is safely escaped
-      # before it touches JSON. Passing raw ${{ }} expressions into a JSON
-      # string literal breaks when the message contains quotes or newlines.
+      # Parse Surefire XML reports to extract failed test names, then build
+      # the Slack payload with jq so all values are safely escaped.
       - name: Build Slack payload
         if: ${{ always() && steps.run_tests.outcome == 'failure' }}
         run: |
+          # Extract failed test cases from Surefire XML reports.
+          # Each <testcase> that contains a <failure> or <error> child is a failure.
+          # Output format: "ClassName > methodName"
+          FAILED_TESTS=""
+          if [ -d "target/surefire-reports" ]; then
+            FAILED_TESTS=$(
+              grep -rh '<testcase' target/surefire-reports/*.xml 2>/dev/null \
+              | grep -E '<failure|<error' \
+              | sed 's/.*classname="\([^"]*\)".*name="\([^"]*\)".*/\1 > \2/' \
+              || true
+            )
+
+            # Fallback: use xmllint if grep approach yields nothing
+            if [ -z "$FAILED_TESTS" ]; then
+              FAILED_TESTS=$(
+                for f in target/surefire-reports/*.xml; do
+                  xmllint --xpath \
+                    "//testcase[failure or error]/@classname | //testcase[failure or error]/@name" \
+                    "$f" 2>/dev/null \
+                  | tr ' ' '\n' \
+                  | sed 's/classname="\(.*\)"/CLASS:\1/' \
+                  | sed 's/name="\(.*\)"/METHOD:\1/' \
+                  | paste - - \
+                  | sed 's/CLASS:\(.*\)\tMETHOD:\(.*\)/\1 > \2/'
+                done || true
+              )
+            fi
+          fi
+
+          # If still empty, show a generic message
+          if [ -z "$FAILED_TESTS" ]; then
+            FAILED_TESTS="Could not extract test names — check the run logs."
+          fi
+
+          # Format as a bullet list for Slack mrkdwn
+          FAILED_LIST=$(echo "$FAILED_TESTS" | sed 's/^/• /')
+
           jq -n \
-            --arg repo      "${{ github.repository }}" \
-            --arg repo_url  "${{ github.server_url }}/${{ github.repository }}" \
-            --arg branch    "${{ github.ref_name }}" \
-            --arg actor     "${{ github.actor }}" \
-            --arg sha       "${{ github.sha }}" \
-            --arg sha_url   "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
-            --arg msg       "${{ github.event.head_commit.message }}" \
-            --arg run_url   "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg repo       "${{ github.repository }}" \
+            --arg repo_url   "${{ github.server_url }}/${{ github.repository }}" \
+            --arg branch     "${{ github.ref_name }}" \
+            --arg actor      "${{ github.actor }}" \
+            --arg sha        "${{ github.sha }}" \
+            --arg sha_url    "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
+            --arg run_url    "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --arg report_url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
+            --arg failures   "$FAILED_LIST" \
             '{
               blocks: [
                 {
@@ -133,7 +169,7 @@ jobs:
                 },
                 {
                   type: "section",
-                  text: { type: "mrkdwn", text: ("*Commit message:*\n" + $msg) }
+                  text: { type: "mrkdwn", text: ("*Failed tests:*\n" + $failures) }
                 },
                 {
                   type: "actions",
@@ -153,7 +189,7 @@ jobs:
                 {
                   type: "context",
                   elements: [
-                    { type: "mrkdwn", text: "Screenshots and Allure results are attached as build artifacts in the run above." }
+                    { type: "mrkdwn", text: "Screenshots and full Allure results are attached as build artifacts in the run above." }
                   ]
                 }
               ]
