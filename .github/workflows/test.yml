@@ -26,12 +26,9 @@ jobs:
 
       - name: Run tests
         id: run_tests
-        # Pass headless flag as a Maven system property so Selenide picks it up
-        # directly from the properties mechanism — no env var needed.
         run: mvn verify -Dselenide.headless=true
         continue-on-error: true
 
-      # ── Install Allure CLI ────────────────────────────────────────────────
       - name: Install Allure CLI
         if: always()
         run: |
@@ -39,13 +36,12 @@ jobs:
           wget -qO allure.tgz "https://github.com/allure-framework/allure2/releases/download/${ALLURE_VERSION}/allure-${ALLURE_VERSION}.tgz"
           tar -xzf allure.tgz
           sudo mv allure-${ALLURE_VERSION} /opt/allure
-          sudo ln -s /opt/allure/bin/allure /usr/local/bin/allure
+          sudo ln -sf /opt/allure/bin/allure /usr/local/bin/allure
 
-      # ── Pull previous Allure history from gh-pages ────────────────────────
       - name: Get Allure history from gh-pages
-        uses: actions/checkout@v4
         if: always()
         continue-on-error: true
+        uses: actions/checkout@v4
         with:
           ref: gh-pages
           path: gh-pages
@@ -58,162 +54,170 @@ jobs:
             cp -r gh-pages/history target/allure-results/history
             echo "History copied from previous run."
           else
-            echo "No previous history — first run."
+            echo "No previous history - first run."
           fi
 
-      # ── Generate Allure HTML report ───────────────────────────────────────
       - name: Generate Allure HTML report
         if: always()
         run: allure generate target/allure-results --clean -o allure-report
 
-      # ── Deploy to GitHub Pages ────────────────────────────────────────────
       - name: Deploy Allure report to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v4
         if: always()
+        uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: allure-report
           force_orphan: true
 
-      # ── Artifact uploads ──────────────────────────────────────────────────
       - name: Upload Allure results
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: allure-results
           path: target/allure-results/
 
       - name: Upload screenshots
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: screenshots
           path: target/screenshots/
           if-no-files-found: ignore
 
       - name: Upload Allure report
-        uses: actions/upload-artifact@v4
         if: always()
+        uses: actions/upload-artifact@v4
         with:
           name: allure-report
           path: allure-report/
 
-      # ── Failure notification ──────────────────────────────────────────────
-      # Parse Surefire XML reports to extract test summary counts and failed
-      # test names, then build the Slack payload with jq for safe escaping.
-      - name: Build Slack payload
-        if: ${{ always() && steps.run_tests.outcome == 'failure' }}
+      - name: Write Surefire parser script
+        if: always()
         run: |
-          # ── Aggregate counts from all Surefire XML files ──────────────────
-          TOTAL=0; PASSED=0; FAILED=0; SKIPPED=0
+          cat > /tmp/parse_surefire.py << 'PYEOF'
+          import os
+          import sys
+          import xml.etree.ElementTree as ET
 
-          if [ -d "target/surefire-reports" ]; then
-            for f in target/surefire-reports/TEST-*.xml; do
-              [ -f "$f" ] || continue
-              t=$(xmllint  --xpath "string(//testsuite/@tests)"    "$f" 2>/dev/null || echo 0)
-              fa=$(xmllint --xpath "string(//testsuite/@failures)"  "$f" 2>/dev/null || echo 0)
-              er=$(xmllint --xpath "string(//testsuite/@errors)"    "$f" 2>/dev/null || echo 0)
-              sk=$(xmllint --xpath "string(//testsuite/@skipped)"   "$f" 2>/dev/null || echo 0)
-              TOTAL=$((TOTAL   + ${t:-0}))
-              FAILED=$((FAILED + ${fa:-0} + ${er:-0}))
-              SKIPPED=$((SKIPPED + ${sk:-0}))
-            done
-            PASSED=$((TOTAL - FAILED - SKIPPED))
+          reports_dir = "target/surefire-reports"
+          total = failed = skipped = 0
+          failed_tests = []
+
+          if os.path.isdir(reports_dir):
+              for fname in sorted(os.listdir(reports_dir)):
+                  if not fname.startswith("TEST-") or not fname.endswith(".xml"):
+                      continue
+
+                  fpath = os.path.join(reports_dir, fname)
+                  try:
+                      tree = ET.parse(fpath)
+                      root = tree.getroot()
+                      suite = root if root.tag == "testsuite" else root.find("testsuite")
+                      if suite is None:
+                          suite = root
+
+                      total += int(suite.get("tests", 0))
+                      failed += int(suite.get("failures", 0)) + int(suite.get("errors", 0))
+                      skipped += int(suite.get("skipped", 0))
+
+                      for tc in tree.findall(".//testcase"):
+                          if tc.find("failure") is not None or tc.find("error") is not None:
+                              classname = tc.get("classname", "")
+                              name = tc.get("name", "")
+                              failed_tests.append(f"{classname}.{name}")
+                  except Exception as ex:
+                      print(f"WARN: could not parse {fpath}: {ex}", file=sys.stderr)
+
+          passed = total - failed - skipped
+          summary = (
+              f"* Total: {total}\\n"
+              f"* Passed: {passed}\\n"
+              f"* Failed: {failed}\\n"
+              f"* Skipped: {skipped}"
+          )
+
+          if failed_tests:
+              failures = "\\n".join(f"* {t}" for t in failed_tests)
+          else:
+              failures = "* None"
+
+          print(f"SUMMARY<<ENDOFVAR\\n{summary}\\nENDOFVAR")
+          print(f"FAILURES<<ENDOFVAR\\n{failures}\\nENDOFVAR")
+          PYEOF
+
+      - name: Parse Surefire reports
+        id: surefire
+        if: always()
+        run: python3 /tmp/parse_surefire.py >> "$GITHUB_OUTPUT"
+
+      - name: Build Slack payload
+        if: always()
+        run: |
+          if [ "${{ steps.run_tests.outcome }}" = "success" ]; then
+            STATUS_ICON="PASS"
+            STATUS_TEXT="Test Suite Passed"
+          else
+            STATUS_ICON="FAIL"
+            STATUS_TEXT="Test Suite Failed"
           fi
-
-          # ── Extract failed test names as classname.methodname ─────────────
-          FAILED_LIST=""
-          if [ -d "target/surefire-reports" ]; then
-            for f in target/surefire-reports/TEST-*.xml; do
-              [ -f "$f" ] || continue
-              # Pull every <testcase classname="..." name="..."> that has a
-              # <failure> or <error> child element
-              while IFS= read -r line; do
-                classname=$(echo "$line" | sed 's/.*classname="\([^"]*\)".*/\1/')
-                methodname=$(echo "$line" | sed 's/.*name="\([^"]*\)".*/\1/')
-                FAILED_LIST="${FAILED_LIST}• ${classname}.${methodname}\n"
-              done < <(
-                python3 - "$f" <<'PYEOF'
-import sys, xml.etree.ElementTree as ET
-tree = ET.parse(sys.argv[1])
-for tc in tree.findall('.//testcase'):
-    if tc.find('failure') is not None or tc.find('error') is not None:
-        print(f'classname="{tc.get("classname")}" name="{tc.get("name")}"')
-PYEOF
-              )
-            done
-          fi
-
-          [ -z "$FAILED_LIST" ] && FAILED_LIST="• (no test names found — check run logs)\n"
-
-          # ── Build summary and failed-tests strings ────────────────────────
-          SUMMARY="• Total: ${TOTAL}\n• Passed: ${PASSED}\n• Failed: ${FAILED}\n• Skipped: ${SKIPPED}"
-
-          # printf to interpret \n escape sequences
-          SUMMARY_TEXT=$(printf "$SUMMARY")
-          FAILED_TEXT=$(printf "$FAILED_LIST")
 
           jq -n \
-            --arg repo       "${{ github.repository }}" \
-            --arg repo_url   "${{ github.server_url }}/${{ github.repository }}" \
-            --arg branch     "${{ github.ref_name }}" \
-            --arg actor      "${{ github.actor }}" \
-            --arg sha        "${{ github.sha }}" \
-            --arg sha_url    "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
-            --arg run_url    "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --arg status_icon "$STATUS_ICON" \
+            --arg status_text "$STATUS_TEXT" \
+            --arg repo "${{ github.repository }}" \
+            --arg repo_url "${{ github.server_url }}/${{ github.repository }}" \
+            --arg branch "${{ github.ref_name }}" \
+            --arg actor "${{ github.actor }}" \
+            --arg sha "${{ github.sha }}" \
+            --arg sha_url "${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}" \
+            --arg run_url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             --arg report_url "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/" \
-            --arg summary    "$SUMMARY_TEXT" \
-            --arg failures   "$FAILED_TEXT" \
+            --arg summary "${{ steps.surefire.outputs.SUMMARY }}" \
+            --arg failures "${{ steps.surefire.outputs.FAILURES }}" \
             '{
               blocks: [
                 {
                   type: "header",
-                  text: { type: "plain_text", text: "❌ Test Suite Failed", emoji: true }
+                  text: { type: "plain_text", text: ($status_icon + " " + $status_text), emoji: true }
                 },
                 {
                   type: "section",
                   fields: [
-                    { type: "mrkdwn", text: ("*Repository:*\n<" + $repo_url + "|" + $repo + ">") },
-                    { type: "mrkdwn", text: ("*Branch:*\n`" + $branch + "`") },
-                    { type: "mrkdwn", text: ("*Triggered by:*\n" + $actor) },
-                    { type: "mrkdwn", text: ("*Commit:*\n<" + $sha_url + "|`" + ($sha | .[0:7]) + "`>") }
+                    { type: "mrkdwn", text: ("*Repository:*\\n<" + $repo_url + "|" + $repo + ">") },
+                    { type: "mrkdwn", text: ("*Branch:*\\n`" + $branch + "`") },
+                    { type: "mrkdwn", text: ("*Triggered by:*\\n" + $actor) },
+                    { type: "mrkdwn", text: ("*Commit:*\\n<" + $sha_url + "|`" + ($sha | .[0:7]) + "`>") }
                   ]
                 },
                 {
                   type: "section",
-                  text: { type: "mrkdwn", text: ("*Test summary*\n" + $summary) }
+                  text: { type: "mrkdwn", text: ("*Test summary*\\n" + $summary) }
                 },
                 {
                   type: "section",
-                  text: { type: "mrkdwn", text: ("*Failed tests*\n" + $failures) }
+                  text: { type: "mrkdwn", text: ("*Failed tests*\\n" + $failures) }
                 },
                 {
                   type: "actions",
                   elements: [
                     {
                       type: "button",
-                      text: { type: "plain_text", text: "🔍 View Run Logs", emoji: true },
+                      text: { type: "plain_text", text: "View Run Logs", emoji: true },
                       url: $run_url
                     },
                     {
                       type: "button",
-                      text: { type: "plain_text", text: "📊 Allure Report", emoji: true },
+                      text: { type: "plain_text", text: "Allure Report (GitHub Pages)", emoji: true },
                       url: $report_url
                     }
-                  ]
-                },
-                {
-                  type: "context",
-                  elements: [
-                    { type: "mrkdwn", text: "Screenshots and full Allure results are attached as build artifacts in the run above." }
                   ]
                 }
               ]
             }' > /tmp/slack_payload.json
 
-      - name: Notify on failure via Slack
-        if: ${{ always() && steps.run_tests.outcome == 'failure' }}
+      - name: Notify via Slack
+        if: ${{ always() && secrets.SLACK_WEBHOOK_URL != '' }}
         continue-on-error: true
         uses: slackapi/slack-github-action@v1.27.0
         with:

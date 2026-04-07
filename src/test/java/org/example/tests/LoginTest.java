@@ -211,10 +211,6 @@ public class LoginTest extends BaseTest {
         assertThat(loginPage.getErrorMessage()).contains("Sorry, this user has been locked out");
     }
 
-    // -------------------------------------------------------------------------
-    // Error dismissal
-    // -------------------------------------------------------------------------
-
     /**
      * Verifies that clicking the dismiss (×) button on the error banner hides it.
      *

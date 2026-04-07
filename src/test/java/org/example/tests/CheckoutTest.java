@@ -47,7 +47,7 @@ public class CheckoutTest extends BaseTest {
      *   <li>Navigates to the cart page</li>
      *   <li>Clicks "Checkout" to land on the step-one form</li>
      * </ol>
-     * Called after {@link BaseTest#setUp()} which opens the base URL.
+     * Called after the shared BaseTest setup opens the base URL.
      */
     @BeforeEach
     void setUpCartWithOneItem() {
@@ -146,6 +146,15 @@ public class CheckoutTest extends BaseTest {
         checkoutPage.enterShippingInfo(info);
         checkoutPage.continueCheckout();
         assertThat(checkoutPage.getErrorMessage()).contains(expectedError);
+    }
+
+    @Test
+    @Story("Checkout") @Severity(SeverityLevel.NORMAL)
+    @Description("Submitting checkout with empty first name shows first-name validation error")
+    void emptyFirstNameShowsError() {
+        checkoutPage.enterShippingInfo(TestDataProvider.MISSING_FIRST_NAME);
+        checkoutPage.continueCheckout();
+        assertThat(checkoutPage.getErrorMessage()).contains("First Name is required");
     }
 
     // -------------------------------------------------------------------------
