@@ -1,6 +1,5 @@
 package org.example.tests;
 
-import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.WebDriverRunner;
 import io.qameta.allure.Description;
 import io.qameta.allure.Severity;
@@ -18,7 +17,6 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 
-import static com.codeborne.selenide.Selenide.$;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -73,9 +71,7 @@ public class CheckoutTest extends BaseTest {
     @Story("Checkout") @Severity(SeverityLevel.CRITICAL)
     @Description("Checkout form requests first name, last name, and postal code fields")
     void checkoutFormRequestsShippingInfo() {
-        $("[data-test='firstName']").shouldBe(Condition.visible);
-        $("[data-test='lastName']").shouldBe(Condition.visible);
-        $("[data-test='postalCode']").shouldBe(Condition.visible);
+        assertThat(checkoutPage.isShippingFormVisible()).isTrue();
     }
 
     /**

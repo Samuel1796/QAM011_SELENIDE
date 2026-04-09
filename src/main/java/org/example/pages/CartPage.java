@@ -17,6 +17,8 @@ import static com.codeborne.selenide.Selenide.$$;
  */
 public class CartPage {
 
+    private static final String CART_CONTENTS = ".cart_contents_container";
+
     /**
      * CSS selector for the name label of each item currently in the cart.
      * Scoped inside {@code .cart_item} to avoid matching product names elsewhere.
@@ -73,7 +75,9 @@ public class CartPage {
      * @param name the exact display name of the product to remove
      */
     public void removeItem(String name) {
-        $$(CART_ITEM_ROW).findBy(Condition.text(name)).$(REMOVE_BUTTON).click();
+        $$(CART_ITEM_ROW).findBy(Condition.text(name)).$(REMOVE_BUTTON)
+                .shouldBe(Condition.visible, Condition.enabled)
+                .click();
     }
 
     /**
@@ -96,7 +100,7 @@ public class CartPage {
      * {@code /checkout-step-one.html}.</p>
      */
     public void proceedToCheckout() {
-        $(CHECKOUT_BUTTON).click();
+        $(CHECKOUT_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -106,6 +110,11 @@ public class CartPage {
      * allowing tests to add more items before proceeding to checkout.</p>
      */
     public void continueShopping() {
-        $(CONTINUE_SHOPPING_BUTTON).click();
+        $(CONTINUE_SHOPPING_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
+    }
+
+    public boolean isLoaded() {
+        $(CART_CONTENTS).shouldBe(Condition.visible);
+        return true;
     }
 }

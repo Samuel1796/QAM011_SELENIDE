@@ -1,5 +1,7 @@
 package org.example.pages;
 
+import com.codeborne.selenide.Condition;
+
 import static com.codeborne.selenide.Selenide.$;
 
 /**
@@ -12,6 +14,12 @@ import static com.codeborne.selenide.Selenide.$;
  */
 public class ProductDetailPage {
 
+    private static final String DETAIL_NAME = ".inventory_details_name";
+    private static final String DETAIL_PRICE = ".inventory_details_price";
+    private static final String DETAIL_DESCRIPTION = ".inventory_details_desc";
+    private static final String ADD_TO_CART_BUTTON = "[data-test^='add-to-cart']";
+    private static final String BACK_TO_PRODUCTS_BUTTON = "#back-to-products";
+
     /**
      * Returns the product name as displayed in the detail view heading.
      *
@@ -21,7 +29,7 @@ public class ProductDetailPage {
      * @return the product name string
      */
     public String getProductName() {
-        return $(".inventory_details_name").getText();
+        return $(DETAIL_NAME).shouldBe(Condition.visible).getText();
     }
 
     /**
@@ -34,7 +42,7 @@ public class ProductDetailPage {
      * @return the price string including the currency symbol
      */
     public String getPrice() {
-        return $(".inventory_details_price").getText();
+        return $(DETAIL_PRICE).shouldBe(Condition.visible).getText();
     }
 
     /**
@@ -46,7 +54,7 @@ public class ProductDetailPage {
      * @return the product description string
      */
     public String getDescription() {
-        return $(".inventory_details_desc").getText();
+        return $(DETAIL_DESCRIPTION).shouldBe(Condition.visible).getText();
     }
 
     /**
@@ -57,7 +65,7 @@ public class ProductDetailPage {
      * page via {@link #backToProducts()} to assert the badge count.</p>
      */
     public void addToCart() {
-        $("[data-test='add-to-cart']").click();
+        $(ADD_TO_CART_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -67,6 +75,6 @@ public class ProductDetailPage {
      * back button, keeping the test flow explicit and predictable.</p>
      */
     public void backToProducts() {
-        $("#back-to-products").click();
+        $(BACK_TO_PRODUCTS_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
     }
 }

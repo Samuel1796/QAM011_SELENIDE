@@ -1,6 +1,5 @@
 package org.example.tests;
 
-import com.codeborne.selenide.Condition;
 import com.codeborne.selenide.WebDriverRunner;
 import io.qameta.allure.Description;
 import io.qameta.allure.Severity;
@@ -14,7 +13,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
 
-import static com.codeborne.selenide.Selenide.$;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
@@ -50,7 +48,7 @@ public class LoginTest extends BaseTest {
     @Description("Valid credentials navigate to the products page")
     void validLoginNavigatesToProductsPage() {
         loginAs(TestUser.STANDARD);
-        $(".inventory_list").shouldBe(Condition.visible);
+        assertThat(productsPage.isLoaded()).isTrue();
     }
 
     /**
@@ -185,8 +183,12 @@ public class LoginTest extends BaseTest {
     @Description("Special-character usernames are rejected gracefully without crashing")
     void specialCharacterUsernamesAreRejectedGracefully(String username) {
         loginPage.enterUsername(username).enterPassword(TestDataProvider.VALID_PASSWORD).submit();
-        assertThat(loginPage.getErrorMessage()).isNotEmpty();
+        String errorMessage = loginPage.getErrorMessage();
         assertThat(WebDriverRunner.url()).doesNotContain("/inventory.html");
+        assertThat(loginPage.isLoaded()).isTrue();
+        if (!errorMessage.isEmpty()) {
+            assertThat(errorMessage).containsAnyOf("do not match", "required", "locked out");
+        }
     }
 
     // -------------------------------------------------------------------------

@@ -74,9 +74,9 @@ public class CheckoutPage {
      * @param info the shipping details to enter into the form
      */
     public void enterShippingInfo(ShippingInfo info) {
-        $(FIRST_NAME).setValue(info.firstName());
-        $(LAST_NAME).setValue(info.lastName());
-        $(POSTAL_CODE).setValue(info.postalCode());
+        $(FIRST_NAME).shouldBe(Condition.visible, Condition.enabled).setValue(info.firstName());
+        $(LAST_NAME).shouldBe(Condition.visible, Condition.enabled).setValue(info.lastName());
+        $(POSTAL_CODE).shouldBe(Condition.visible, Condition.enabled).setValue(info.postalCode());
     }
 
     /**
@@ -87,7 +87,7 @@ public class CheckoutPage {
      * assert the correct error text.</p>
      */
     public void continueCheckout() {
-        $(CONTINUE_BUTTON).click();
+        $(CONTINUE_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -101,7 +101,7 @@ public class CheckoutPage {
      * </p>
      */
     public void cancelCheckout() {
-        $(CANCEL_BUTTON).click();
+        $(CANCEL_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -113,6 +113,7 @@ public class CheckoutPage {
      * @return an ordered list of item name strings from the order summary
      */
     public List<String> getItemNames() {
+        $(TOTAL_PRICE).shouldBe(Condition.visible);
         return $$(SUMMARY_ITEM_NAME).texts();
     }
 
@@ -126,7 +127,7 @@ public class CheckoutPage {
      * @return the total price label string as displayed in the UI
      */
     public String getTotalPrice() {
-        return $(TOTAL_PRICE).getText();
+        return $(TOTAL_PRICE).shouldBe(Condition.visible).getText();
     }
 
     /**
@@ -136,7 +137,7 @@ public class CheckoutPage {
      * {@link #getConfirmationMessage()} can be used to assert the success message.</p>
      */
     public void finishOrder() {
-        $(FINISH_BUTTON).click();
+        $(FINISH_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -149,7 +150,7 @@ public class CheckoutPage {
      * @return the confirmation heading string
      */
     public String getConfirmationMessage() {
-        return $(CONFIRMATION_HEADER).getText();
+        return $(CONFIRMATION_HEADER).shouldBe(Condition.visible).getText();
     }
 
     /**
@@ -164,5 +165,12 @@ public class CheckoutPage {
      */
     public String getErrorMessage() {
         return $(ERROR_MESSAGE).shouldBe(Condition.visible).getText();
+    }
+
+    public boolean isShippingFormVisible() {
+        $(FIRST_NAME).shouldBe(Condition.visible);
+        $(LAST_NAME).shouldBe(Condition.visible);
+        $(POSTAL_CODE).shouldBe(Condition.visible);
+        return true;
     }
 }

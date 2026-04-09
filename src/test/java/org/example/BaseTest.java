@@ -14,6 +14,9 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 
+import static com.codeborne.selenide.Selenide.clearBrowserCookies;
+import static com.codeborne.selenide.Selenide.clearBrowserLocalStorage;
+import static com.codeborne.selenide.Selenide.closeWebDriver;
 import static com.codeborne.selenide.Selenide.open;
 
 /**
@@ -21,9 +24,8 @@ import static com.codeborne.selenide.Selenide.open;
  *
  * <p>Responsibilities (SRP — each concern is delegated):
  * <ul>
- *   <li>Browser lifecycle: open the browser before each test. WebDriver teardown is
- *       handled by {@link ScreenshotWatcher} so the driver is still alive when a
- *       failure screenshot is captured.</li>
+ *   <li>Browser lifecycle: open a clean browser state before each test and close
+ *       WebDriver after each test.</li>
  *   <li>Allure integration: register/deregister the {@link AllureSelenide} listener
  *       so screenshots and page sources are attached to reports on failure.</li>
  *   <li>Page object fields: pre-instantiated page objects available to all subclasses
@@ -34,7 +36,7 @@ import static com.codeborne.selenide.Selenide.open;
  * </p>
  *
  * <p>Browser configuration is delegated to {@link BrowserConfig} (SRP).
- * Screenshot-on-failure and WebDriver close are delegated to {@link ScreenshotWatcher} (SRP).</p>
+ * Screenshot-on-failure is delegated to {@link ScreenshotWatcher} (SRP).</p>
  *
  * <p>All test classes must extend this class to inherit the setup/teardown lifecycle.</p>
  */
@@ -83,6 +85,9 @@ public class BaseTest {
                         .screenshots(true)
                         .savePageSource(false));
         open("/");
+        clearBrowserCookies();
+        clearBrowserLocalStorage();
+        open("/");
 
         loginPage       = new LoginPage();
         productsPage    = new ProductsPage();
@@ -94,13 +99,13 @@ public class BaseTest {
     /**
      * Runs after each test method.
      *
-     * <p>Removes the Allure listener to prevent accumulation across tests.
-     * WebDriver is closed by {@link ScreenshotWatcher} (after any failure screenshot
-     * is taken) — do NOT call {@code closeWebDriver()} here.</p>
+     * <p>Removes the Allure listener to prevent accumulation across tests, then
+     * closes WebDriver to enforce test isolation.</p>
      */
     @AfterEach
     void tearDown() {
         SelenideLogger.removeListener(ALLURE_LISTENER_KEY);
+        closeWebDriver();
     }
 
     /**

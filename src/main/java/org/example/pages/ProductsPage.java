@@ -23,6 +23,8 @@ import static com.codeborne.selenide.Selenide.$$;
  */
 public class ProductsPage {
 
+    private static final String INVENTORY_LIST = ".inventory_list";
+
     /** CSS selector matching every product name link in the inventory grid. */
     private static final String PRODUCT_NAME = ".inventory_item_name";
 
@@ -63,6 +65,7 @@ public class ProductsPage {
      * @return an ordered list of product name strings as shown in the UI
      */
     public List<String> getProductNames() {
+        $(INVENTORY_LIST).shouldBe(Condition.visible);
         return $$(PRODUCT_NAME).texts();
     }
 
@@ -97,7 +100,7 @@ public class ProductsPage {
      * @param sortValue the {@code value} attribute of the {@code <option>} to select
      */
     public void sortBy(String sortValue) {
-        $(SORT_DROPDOWN).selectOptionByValue(sortValue);
+        $(SORT_DROPDOWN).shouldBe(Condition.visible, Condition.enabled).selectOptionByValue(sortValue);
     }
 
     /**
@@ -136,7 +139,7 @@ public class ProductsPage {
      * shared with other page objects without duplication.</p>
      */
     public void goToCart() {
-        $(BrowserConfig.CART_LINK_SELECTOR).click();
+        $(BrowserConfig.CART_LINK_SELECTOR).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -146,7 +149,7 @@ public class ProductsPage {
      * without caring which specific product is added.</p>
      */
     public void addFirstItemToCart() {
-        $$(ADD_TO_CART_BUTTONS).first().click();
+        $$(ADD_TO_CART_BUTTONS).first().shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -158,7 +161,7 @@ public class ProductsPage {
      * @param index zero-based index of the add-to-cart button to click
      */
     public void addItemToCartByIndex(int index) {
-        $$(ADD_TO_CART_BUTTONS).get(index).click();
+        $$(ADD_TO_CART_BUTTONS).get(index).shouldBe(Condition.visible, Condition.enabled).click();
     }
 
     /**
@@ -170,7 +173,9 @@ public class ProductsPage {
      * @param name the exact display name of the product to add
      */
     public void addItemToCartByName(String name) {
-        $$(PRODUCT_ROW).findBy(Condition.text(name)).$(ADD_TO_CART_BUTTONS).click();
+        $$(PRODUCT_ROW).findBy(Condition.text(name)).$(ADD_TO_CART_BUTTONS)
+                .shouldBe(Condition.visible, Condition.enabled)
+                .click();
     }
 
     /**
@@ -183,7 +188,12 @@ public class ProductsPage {
      * @param index zero-based index of the remove button to click
      */
     public void removeItemFromCartByIndex(int index) {
-        $$(REMOVE_FROM_CART_BUTTONS).get(index).click();
+        $$(REMOVE_FROM_CART_BUTTONS).get(index).shouldBe(Condition.visible, Condition.enabled).click();
+    }
+
+    public boolean isLoaded() {
+        $(INVENTORY_LIST).shouldBe(Condition.visible);
+        return true;
     }
 
     /**
@@ -194,12 +204,10 @@ public class ProductsPage {
      * logout link to be visible before returning, ensuring the menu is fully open.</p>
      */
     public void openBurgerMenu() {
-        $(BURGER_MENU_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
-        // Retry once — the side menu animation can cause the first click to be missed
-        // in headless/CI environments where rendering is slower.
-        if (!$(LOGOUT_LINK).is(Condition.visible)) {
-            $(BURGER_MENU_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
+        if ($(LOGOUT_LINK).is(Condition.visible)) {
+            return;
         }
+        $(BURGER_MENU_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
         $(LOGOUT_LINK).shouldBe(Condition.visible);
     }
 

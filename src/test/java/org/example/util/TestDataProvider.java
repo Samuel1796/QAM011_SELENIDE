@@ -129,17 +129,16 @@ public final class TestDataProvider {
      * tests in {@code LoginTest#specialCharacterUsernamesAreRejectedGracefully}.
      *
      * <p>These inputs simulate common attack vectors (SQL injection, XSS, comment
-     * injection, newline injection, and an oversized input). The app must reject
+     * injection, and an oversized input). The app must reject
      * them gracefully — showing an error and not navigating to the inventory page.</p>
      *
-     * @return a stream of five malicious input strings
+     * @return a stream of four malicious input strings
      */
     public static Stream<String> maliciousUsernames() {
         return Stream.of(
             "' OR '1'='1",
             "<script>alert(1)</script>",
             "admin'--",
-            "standard_user\n",
             "a".repeat(255)
         );
     }

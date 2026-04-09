@@ -44,7 +44,7 @@ public class LoginPage {
      * @return this {@code LoginPage} instance for fluent method chaining
      */
     public LoginPage enterUsername(String username) {
-        $(USERNAME_INPUT).setValue(username);
+        $(USERNAME_INPUT).shouldBe(Condition.visible, Condition.enabled).setValue(username);
         return this;
     }
 
@@ -58,7 +58,7 @@ public class LoginPage {
      * @return this {@code LoginPage} instance for fluent method chaining
      */
     public LoginPage enterPassword(String password) {
-        $(PASSWORD_INPUT).setValue(password);
+        $(PASSWORD_INPUT).shouldBe(Condition.visible, Condition.enabled).setValue(password);
         return this;
     }
 
@@ -71,7 +71,15 @@ public class LoginPage {
      * an error banner.</p>
      */
     public void submit() {
-        $(LOGIN_BUTTON).click();
+        $(LOGIN_BUTTON).shouldBe(Condition.visible, Condition.enabled).click();
+    }
+
+    /** Returns true when the login form controls are visible and ready for use. */
+    public boolean isLoaded() {
+        $(USERNAME_INPUT).shouldBe(Condition.visible);
+        $(PASSWORD_INPUT).shouldBe(Condition.visible);
+        $(LOGIN_BUTTON).shouldBe(Condition.visible);
+        return true;
     }
 
     /**

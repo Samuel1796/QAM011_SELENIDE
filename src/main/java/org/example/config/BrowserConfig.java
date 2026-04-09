@@ -58,11 +58,12 @@ public final class BrowserConfig {
      * a visible window and no extra arguments are applied.</p>
      */
     public static void applyBrowserOptions() {
+        ChromeOptions options = new ChromeOptions();
+        options.addArguments("--window-size=1920,1080", "--disable-gpu");
         if (Configuration.headless) {
-            ChromeOptions options = new ChromeOptions();
             options.addArguments("--headless=new", "--no-sandbox", "--disable-dev-shm-usage");
-            Configuration.browserCapabilities = options;
         }
+        Configuration.browserCapabilities = options;
     }
 
     /**
